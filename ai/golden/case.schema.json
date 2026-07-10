@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Golden case",
+  "type": "object",
+  "required": ["id", "input", "expected"],
+  "properties": {
+    "id": { "type": "string" },
+    "description": { "type": "string" },
+    "input": { "type": "object" },
+    "expected": { "type": "object" }
+  },
+  "additionalProperties": false
+}
