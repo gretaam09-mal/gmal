@@ -1,0 +1,27 @@
+/**
+ * Runtime CSS custom properties mirroring design-system/tokens.ts.
+ * Keep the two in sync by hand — tokens.ts is generated into
+ * tailwind.config.ts, tokens.css is what components read at runtime
+ * (e.g. for the density switch, which Tailwind classes alone can't do).
+ */
+
+:root {
+  --color-paper: #fafaf7;
+  --color-ink: #1b1f27;
+  --color-primary-navy: #1a3a5c;
+
+  --font-ui: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-document: "Source Serif 4", Georgia, serif;
+
+  --density-padding: 1;
+  --density-line-height: 1.3;
+}
+
+:root[data-density="comfortable"] {
+  --density-padding: 1.5;
+  --density-line-height: 1.5;
+}
+
+body {
+  font-variant-numeric: tabular-nums;
+}

@@ -1,0 +1,6 @@
+{
+  "id": "placeholder",
+  "description": "Harness proof case — asserts the golden-set runner can load and compare a case. Not a real regulatory scenario.",
+  "input": {},
+  "expected": {}
+}

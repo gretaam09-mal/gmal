@@ -1,0 +1,30 @@
+# Node / frontend
+node_modules/
+.next/
+out/
+coverage/
+playwright-report/
+test-results/
+.turbo/
+
+# Python / backend
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+# Env
+.env
+.env.*.local
+
+# OS
+.DS_Store
