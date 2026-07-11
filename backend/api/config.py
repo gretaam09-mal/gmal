@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +12,18 @@ class Settings(BaseSettings):
     env: str = "development"
     database_url: str = "postgresql+psycopg://provision:provision@localhost:5432/provision"
     aws_region: str = "eu-west-2"
+
+    @field_validator("database_url")
+    @classmethod
+    def _use_psycopg_driver(cls, value: str) -> str:
+        """Managed Postgres providers (Render, Heroku, ...) hand out a plain
+        postgres:// or postgresql:// URL; SQLAlchemy needs the driver named
+        explicitly. Rewriting it here means every deployment can just set
+        the provider's raw connection string with no manual editing."""
+        for prefix in ("postgres://", "postgresql://"):
+            if value.startswith(prefix):
+                return "postgresql+psycopg://" + value[len(prefix) :]
+        return value
 
     # Clerk (see docs/adr/0001-clerk-for-authentication.md). Unset in dev/CI
     # until a Clerk application exists — see docs/runbooks/clerk-setup.md.
@@ -24,6 +37,14 @@ class Settings(BaseSettings):
     # Companies House public data API — see docs/runbooks/companies-house-setup.md.
     companies_house_api_key: str | None = None
     companies_house_base_url: str = "https://api.company-information.service.gov.uk"
+
+    # Comma-separated origins allowed to call the API from a browser (the
+    # frontend is on a different host in every deployment). "*" in dev.
+    cors_allowed_origins: str = "*"
+
+    @property
+    def cors_allowed_origins_list(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
 
 
 @lru_cache
