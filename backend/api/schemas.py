@@ -132,3 +132,192 @@ class AutofillRequest(BaseModel):
 
 class ProfileUpdateRequest(BaseModel):
     fields: list[ProfileFieldIn]
+
+
+class MeOut(BaseModel):
+    id: uuid.UUID
+    email: str
+    is_staff: bool
+
+    model_config = {"from_attributes": True}
+
+
+# --- F3: instrument-onboarding workbench (staff-only, /admin) --------------
+
+
+class InstrumentCreateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    jurisdiction: str = Field(default="UK", max_length=50)
+    kind: str = Field(min_length=1, max_length=100)
+    citation: str | None = Field(default=None, max_length=300)
+    version_label: str = Field(min_length=1, max_length=100)
+    source_url: str | None = None
+    raw_text: str = Field(min_length=1)
+
+
+class ClauseOut(BaseModel):
+    id: uuid.UUID
+    clause_ref: str
+    text: str
+    ordinal: int
+
+    model_config = {"from_attributes": True}
+
+
+class InstrumentOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    jurisdiction: str
+    kind: str
+    citation: str | None
+    recorded_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class InstrumentVersionOut(BaseModel):
+    id: uuid.UUID
+    instrument_id: uuid.UUID
+    version_label: str
+    source_url: str | None
+    content_hash: str
+    clauses: list[ClauseOut]
+
+
+class InstrumentDetailOut(InstrumentOut):
+    versions: list[InstrumentVersionOut]
+
+
+class ExtractedFieldOut(BaseModel):
+    value: str
+    clause_ref: str
+    confidence: int
+
+
+class ObligationOut(BaseModel):
+    id: uuid.UUID
+    clause_id: uuid.UUID
+    summary: str
+    obligation_type: str
+    fields: dict[str, ExtractedFieldOut]
+    confidence: int
+    extracted_by: str
+    approved: bool
+    approved_by_user_id: uuid.UUID | None
+    approved_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
+class ExtractObligationRequest(BaseModel):
+    instrument_title: str = Field(min_length=1)
+
+
+class ObligationUpdateRequest(BaseModel):
+    summary: str | None = None
+    obligation_type: str | None = None
+    fields: dict[str, ExtractedFieldOut] | None = None
+    confidence: int | None = Field(default=None, ge=0, le=100)
+
+
+class ObligationCorrectRequest(BaseModel):
+    summary: str
+    obligation_type: str
+    fields: dict[str, ExtractedFieldOut]
+    confidence: int = Field(ge=0, le=100)
+
+
+class PredicateOut(BaseModel):
+    id: uuid.UUID
+    obligation_id: uuid.UUID
+    predicate_key: str
+    expression: dict[str, Any]
+    status: str
+    drafted_by_ai: bool
+    approved_by_user_id: uuid.UUID | None
+    approved_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
+class PredicateCreateRequest(BaseModel):
+    predicate_key: str = Field(min_length=1, max_length=100)
+    expression: dict[str, Any]
+
+
+class PredicateUpdateRequest(BaseModel):
+    expression: dict[str, Any]
+
+
+class PredicateTestResultOut(BaseModel):
+    profile_name: str
+    outcome: str
+    missing_field_keys: tuple[str, ...]
+
+
+class CostTemplateCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    drivers: list[dict[str, Any]] = Field(default_factory=list)
+    formula: dict[str, Any]
+    currency: str = Field(default="GBP", max_length=10)
+    source_basis: str = Field(min_length=1, max_length=200)
+    maturity_tier: str = Field(min_length=1, max_length=50)
+
+
+class CostTemplateOut(BaseModel):
+    id: uuid.UUID
+    obligation_id: uuid.UUID | None
+    name: str
+    drivers: list[dict[str, Any]]
+    formula: dict[str, Any]
+    currency: str
+    source_basis: str
+    maturity_tier: str
+    valid_from: datetime
+    valid_to: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
+class OnboardingMetricOut(BaseModel):
+    instrument_id: str
+    instrument_title: str
+    onboarding_hours: float
+    started_at: str
+    completed_at: str
+
+
+# --- F4: applicability engine ------------------------------------------------
+
+
+class AnalysisCreateRequest(BaseModel):
+    entity_profile_id: uuid.UUID | None = None
+    """Defaults to the workspace's current profile version if omitted."""
+
+
+class AnalysisItemOut(BaseModel):
+    id: uuid.UUID
+    predicate_id: uuid.UUID
+    instrument_title: str
+    obligation_summary: str
+    outcome: str
+    missing_field_keys: tuple[str, ...]
+    rationale: str
+    clause_refs: tuple[str, ...]
+    amount: float | None
+    currency: str
+    impact_band: str
+    confidence: int
+    first_obligation_date: str | None
+    memo_status: str
+    engine_version: str
+    computed_at: datetime
+
+
+class AnalysisOut(BaseModel):
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    entity_profile_id: uuid.UUID
+    status: str
+    created_at: datetime
+    items: list[AnalysisItemOut]

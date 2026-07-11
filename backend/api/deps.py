@@ -1,5 +1,6 @@
 import uuid
 from collections.abc import Iterator
+from typing import TYPE_CHECKING
 
 from fastapi import Depends, Header, HTTPException, Path, status
 from sqlalchemy import select
@@ -9,6 +10,10 @@ from db.models import Membership, MembershipStatus, Role, User
 from db.session import raw_session, set_user_context, workspace_session
 from services.auth.clerk import ClerkAuthError, verify_clerk_token
 from services.companies_house import CompaniesHouseClient
+
+if TYPE_CHECKING:
+    from services.extraction.provider import ExtractionProvider
+    from services.predicate_assist.provider import PredicateAssistProvider
 
 
 def get_raw_session() -> Iterator[Session]:
@@ -99,6 +104,42 @@ def get_companies_house_client() -> Iterator[CompaniesHouseClient]:
     """
     with CompaniesHouseClient() as client:
         yield client
+
+
+def get_extraction_provider() -> "ExtractionProvider":
+    """Real P-EXTRACT provider by default; tests override this with
+    FixtureExtractionProvider (see tests/integration/conftest.py) so no
+    test in this repo makes a live model call. Constructing
+    AnthropicExtractionProvider here (not at import time) is what makes
+    it fail closed with a clear error when no key is configured, instead
+    of at app startup.
+    """
+    from services.extraction.anthropic_provider import AnthropicExtractionProvider
+
+    return AnthropicExtractionProvider()
+
+
+def get_predicate_assist_provider() -> "PredicateAssistProvider":
+    """See get_extraction_provider — same fail-closed-without-a-key shape,
+    for P-PREDICATE-ASSIST (services/predicate_assist.py)."""
+    from services.predicate_assist import AnthropicPredicateAssistProvider
+
+    return AnthropicPredicateAssistProvider()
+
+
+def require_staff(current_user: User = Depends(get_current_user)) -> User:
+    """Gates the F3 instrument-onboarding workbench (/admin/* routes).
+
+    Unrelated to workspace Role — instruments/obligations/predicates are
+    shared reference data, not tenant data (see db/models/regulatory.py),
+    so this is a separate, coarser gate: staff or not. Nobody is staff by
+    default (User.is_staff defaults False); grant it with
+    backend/scripts/grant_staff.py. Fails closed, and this tooling is
+    never linked from the client-facing UI regardless.
+    """
+    if not current_user.is_staff:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Staff access required")
+    return current_user
 
 
 def require_role(*roles: Role):

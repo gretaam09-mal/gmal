@@ -1,0 +1,15 @@
+{
+  "identity.company_name": "Bramwell Industrial Coatings Limited",
+  "scale.band": "medium",
+  "scale.employee_count": 145,
+  "scale.annual_revenue_gbp": 18000000,
+  "activity.sector": "specialty chemicals manufacturing",
+  "activity.sic_codes": ["20301"],
+  "footprint.has_overseas_operations": true,
+  "footprint.processes_personal_data": false,
+  "footprint.employs_staff": true,
+  "footprint.regulated_activity": false,
+  "footprint.handles_hazardous_materials": true,
+  "cost_sketch.compliance_headcount": 3,
+  "cost_sketch.annual_compliance_spend_gbp": 210000
+}

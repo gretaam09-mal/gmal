@@ -1,0 +1,14 @@
+{
+  "identity.company_name": "Ashfield Holdings Limited",
+  "scale.band": "micro",
+  "scale.employee_count": 0,
+  "scale.annual_revenue_gbp": 0,
+  "activity.sector": "holding company",
+  "activity.sic_codes": ["64209"],
+  "footprint.has_overseas_operations": false,
+  "footprint.processes_personal_data": false,
+  "footprint.holds_client_money": false,
+  "footprint.employs_staff": false,
+  "footprint.regulated_activity": false,
+  "footprint.handles_hazardous_materials": false
+}
