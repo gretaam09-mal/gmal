@@ -2,7 +2,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.config import get_settings
-from api.routes import health, invites, profiles, roles, tenants, workspaces
+from api.routes import (
+    admin_instruments,
+    analyses,
+    health,
+    invites,
+    me,
+    profiles,
+    roles,
+    tenants,
+    workspaces,
+)
 
 app = FastAPI(title="Provision API", version="0.1.0")
 
@@ -18,8 +28,11 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(me.router)
 app.include_router(roles.router)
 app.include_router(tenants.router)
 app.include_router(workspaces.router)
 app.include_router(invites.router)
 app.include_router(profiles.router)
+app.include_router(analyses.router)
+app.include_router(admin_instruments.router)
