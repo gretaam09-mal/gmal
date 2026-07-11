@@ -54,6 +54,10 @@ def verify_clerk_token(token: str, *, jwk_client: PyJWKClient | None = None) -> 
             signing_key.key,
             algorithms=["RS256"],
             issuer=settings.clerk_issuer,
+            # Clerk session tokens live for 60s — a few seconds of clock
+            # drift between this server and Clerk's is enough to make a
+            # freshly-issued token look expired without this leeway.
+            leeway=10,
             options={"verify_iss": settings.clerk_issuer is not None, "verify_aud": False},
         )
     except jwt.PyJWTError as exc:

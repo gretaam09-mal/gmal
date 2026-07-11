@@ -1,0 +1,90 @@
+# Render Blueprint — deploys the whole stack (Postgres, backend, frontend)
+# from one "New +" -> "Blueprint" in the Render dashboard. See
+# docs/runbooks/deploy-preview.md for the click-by-click walkthrough.
+#
+# Values marked `sync: false` are secrets Render will prompt you to fill
+# in by hand when you apply this Blueprint — nothing sensitive lives here.
+
+databases:
+  - name: provision-db
+    databaseName: provision
+    user: provision
+    plan: free
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: provision-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install poetry && poetry install --no-root
+    startCommand: >-
+      poetry run python -m scripts.ensure_extensions &&
+      poetry run alembic upgrade head &&
+      poetry run uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: PROVISION_DATABASE_URL
+        fromDatabase:
+          name: provision-db
+          property: connectionString
+      - key: PROVISION_APP_SECRET_KEY
+        generateValue: true
+      # Fill in once you've created a Clerk application — see
+      # docs/runbooks/clerk-setup.md. Blank is fine to deploy; sign-in
+      # just won't work until these are set.
+      - key: PROVISION_CLERK_JWKS_URL
+        sync: false
+      - key: PROVISION_CLERK_ISSUER
+        sync: false
+      # Optional — see docs/runbooks/companies-house-setup.md. The app
+      # runs fine without it; only the auto-fill button needs it.
+      - key: PROVISION_COMPANIES_HOUSE_API_KEY
+        sync: false
+      # Set to the frontend's Render URL once you know it (see
+      # provision-web below) so the browser is allowed to call this API.
+      - key: PROVISION_CORS_ALLOWED_ORIGINS
+        sync: false
+
+  - type: web
+    name: provision-web
+    runtime: node
+    plan: free
+    rootDir: frontend
+    # npx, not `npm install -g pnpm` (Render's build image has a
+    # read-only system node_modules, so a global install fails with
+    # EROFS) and not corepack (its package-signature verification hits
+    # a known keyid-mismatch bug on Render's current Node build). npx
+    # just installs pnpm like any other npm package, no global write,
+    # no signature step.
+    buildCommand: npx --yes pnpm@10 install --frozen-lockfile && npx --yes pnpm@10 build
+    startCommand: npx --yes pnpm@10 start -p $PORT
+    envVars:
+      - key: NODE_VERSION
+        value: 22.11.0
+      # Set to the backend's Render URL (provision-api above) once you
+      # know it, e.g. https://provision-api-xxxx.onrender.com
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+      # From your Clerk application — see docs/runbooks/clerk-setup.md.
+      - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
+      # Without these, Clerk's middleware falls back to redirecting
+      # unauthenticated visitors to the hosted Account Portal on Clerk's
+      # own accounts.dev domain rather than our own /sign-in and
+      # /sign-up pages — an extra cross-domain hop that hangs on this
+      # dev instance. Pointing everything at our own routes keeps the
+      # whole flow same-origin.
+      - key: NEXT_PUBLIC_CLERK_SIGN_IN_URL
+        value: /sign-in
+      - key: NEXT_PUBLIC_CLERK_SIGN_UP_URL
+        value: /sign-up
+      - key: NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL
+        value: /dashboard
+      - key: NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL
+        value: /dashboard
