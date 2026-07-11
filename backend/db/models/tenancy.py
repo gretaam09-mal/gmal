@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Enum, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy import Boolean, Enum, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,6 +30,13 @@ class User(Base, PrimaryKeyMixin, TimestampMixin):
     clerk_user_id: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
     email: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     name: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_staff: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    """Gates the F3 instrument-onboarding workbench (/admin, staff-only —
+    see api/deps.py::require_staff). Nobody is staff by default; grant it
+    with backend/scripts/grant_staff.py. Unrelated to workspace Role,
+    which governs tenant data, not this internal reference-data tooling."""
 
 
 class Workspace(Base, PrimaryKeyMixin, TimestampMixin, TenantScopedMixin):

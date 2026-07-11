@@ -52,6 +52,27 @@ class AnalysisStatus(str, enum.Enum):
     FAILED = "failed"
 
 
+class PredicateStatus(str, enum.Enum):
+    """DRAFT predicates (hand-written or P-PREDICATE-ASSIST output) are
+    never evaluated by F4 — only APPROVED ones are. See
+    docs/CONVENTIONS.md rule 2: once APPROVED, a predicate is immutable
+    (enforced by a DB trigger — see the instrument_onboarding migration)."""
+
+    DRAFT = "draft"
+    APPROVED = "approved"
+
+
+class AnalysisItemOutcome(str, enum.Enum):
+    """Tri-state result of evaluating one predicate against a profile.
+
+    AMBIGUOUS means the profile is missing a fact the predicate needs —
+    see AnalysisItem.missing_field_keys for which one(s)."""
+
+    BINDS = "binds"
+    DOES_NOT_BIND = "does_not_bind"
+    AMBIGUOUS = "ambiguous"
+
+
 class SourceDocumentStatus(str, enum.Enum):
     UPLOADED = "uploaded"
     PROCESSING = "processing"

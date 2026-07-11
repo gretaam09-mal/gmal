@@ -3,9 +3,11 @@ Alembic autogenerate and for create_all() in tests."""
 
 from db.models.analysis import Analysis, AnalysisItem
 from db.models.enums import (
+    AnalysisItemOutcome,
     AnalysisStatus,
     MembershipStatus,
     MemoStatus,
+    PredicateStatus,
     ProfileFieldSource,
     ReviewDecision,
     Role,
@@ -35,6 +37,7 @@ from db.models.tenancy import AuditEvent, Membership, Tenant, User, Workspace
 __all__ = [
     "Analysis",
     "AnalysisItem",
+    "AnalysisItemOutcome",
     "AnalysisStatus",
     "Assumption",
     "AuditEvent",
@@ -53,6 +56,7 @@ __all__ = [
     "MetricsEvent",
     "Obligation",
     "Predicate",
+    "PredicateStatus",
     "ProfileField",
     "ProfileFieldSource",
     "Report",
