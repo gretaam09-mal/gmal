@@ -1,2 +1,2 @@
-// Regulatory exposure computation UI. Empty skeleton — Phase 1.
-export {};
+export { ExposureList } from "./components/ExposureList";
+export type { Analysis, AnalysisItem, Outcome } from "./types";

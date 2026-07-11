@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/design-system/components/button";
+import { ExposureList } from "@/features/exposure";
 import { ProfileEditor } from "@/features/profile/components/ProfileEditor";
 
 import { createTenant, createWorkspace, listWorkspaces } from "../api";
@@ -12,7 +13,7 @@ import { MembersPanel } from "./MembersPanel";
 import { RoleBadge } from "./RoleBadge";
 
 const LAST_TENANT_KEY = "provision:lastTenantId";
-type Tab = "profile" | "members";
+type Tab = "profile" | "exposure" | "members";
 
 export function WorkspaceDashboard() {
   const { getToken } = useAuth();
@@ -95,7 +96,7 @@ export function WorkspaceDashboard() {
               </div>
 
               <div className="flex gap-4 border-b border-ink/10">
-                {(["profile", "members"] as const).map((tab) => (
+                {(["profile", "exposure", "members"] as const).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
@@ -112,6 +113,11 @@ export function WorkspaceDashboard() {
 
               {activeTab === "profile" ? (
                 <ProfileEditor workspaceId={selectedWorkspace.id} />
+              ) : activeTab === "exposure" ? (
+                <ExposureList
+                  workspaceId={selectedWorkspace.id}
+                  onNavigateToProfileField={() => setActiveTab("profile")}
+                />
               ) : (
                 <MembersPanel workspace={selectedWorkspace} getToken={getToken} />
               )}
