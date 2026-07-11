@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from db.models import Membership, MembershipStatus, Role, User
 from db.session import raw_session, set_user_context, workspace_session
 from services.auth.clerk import ClerkAuthError, verify_clerk_token
+from services.companies_house import CompaniesHouseClient
 
 
 def get_raw_session() -> Iterator[Session]:
@@ -89,6 +90,15 @@ def get_workspace_db(
     """
     with workspace_session(membership.tenant_id, membership.workspace_id) as session:
         yield session
+
+
+def get_companies_house_client() -> Iterator[CompaniesHouseClient]:
+    """A dependency (not a plain import) so tests can override it with a
+    fixture-backed client instead of one that hits the real API — see
+    tests/integration/conftest.py::companies_house_client_as.
+    """
+    with CompaniesHouseClient() as client:
+        yield client
 
 
 def require_role(*roles: Role):

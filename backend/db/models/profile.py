@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -57,7 +58,7 @@ class ProfileField(Base, PrimaryKeyMixin, TenantScopedMixin, BitemporalMixin):
         UUID(as_uuid=True), ForeignKey("entity_profiles.id"), nullable=False, index=True
     )
     field_key: Mapped[str] = mapped_column(String, nullable=False)
-    field_value: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    field_value: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
     source: Mapped[ProfileFieldSource] = mapped_column(
         Enum(ProfileFieldSource, name="profile_field_source"), nullable=False
     )

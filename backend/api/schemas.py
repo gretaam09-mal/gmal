@@ -1,9 +1,11 @@
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, EmailStr, Field
 
-from db.models.enums import MembershipStatus, Role
+from db.models.enums import MembershipStatus, ProfileFieldSource, Role
+from engine.completeness.catalog import Section
 
 ROLE_DESCRIPTIONS: dict[Role, str] = {
     Role.OWNER: "Full control: manage members, settings, and all workspace content.",
@@ -75,3 +77,58 @@ class MembershipRoleUpdate(BaseModel):
 
 class InviteAcceptRequest(BaseModel):
     token: str
+
+
+class FieldCatalogEntryOut(BaseModel):
+    key: str
+    section: Section
+    label: str
+    weight: float
+    used_for: str | None
+
+
+class ProfileFieldIn(BaseModel):
+    key: str
+    value: Any = None
+    source: ProfileFieldSource
+    confirmed_at: datetime | None = None
+
+
+class ProfileFieldOut(BaseModel):
+    key: str
+    value: Any
+    source: ProfileFieldSource
+    confirmed_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
+class SectionCompletenessOut(BaseModel):
+    section: Section
+    score: float
+    unknown_field_labels: tuple[str, ...]
+
+
+class CompletenessOut(BaseModel):
+    overall_score: float
+    sections: tuple[SectionCompletenessOut, ...]
+    unknown_field_labels: tuple[str, ...]
+
+
+class EntityProfileOut(BaseModel):
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    version: int
+    is_current: bool
+    companies_house_number: str | None
+    created_at: datetime
+    fields: list[ProfileFieldOut]
+    completeness: CompletenessOut
+
+
+class AutofillRequest(BaseModel):
+    companies_house_number: str = Field(min_length=1, max_length=20)
+
+
+class ProfileUpdateRequest(BaseModel):
+    fields: list[ProfileFieldIn]

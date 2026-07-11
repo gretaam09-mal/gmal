@@ -1,0 +1,30 @@
+{
+  "items": [
+    {
+      "name": "SMITH, John Robert",
+      "officer_role": "director",
+      "appointed_on": "2015-03-12",
+      "nationality": "British",
+      "occupation": "Company Director",
+      "resigned_on": null
+    },
+    {
+      "name": "DOE, Jane",
+      "officer_role": "secretary",
+      "appointed_on": "2018-06-01",
+      "nationality": "British",
+      "occupation": "Company Secretary",
+      "resigned_on": null
+    },
+    {
+      "name": "PREVIOUS, Peter",
+      "officer_role": "director",
+      "appointed_on": "2015-03-12",
+      "nationality": "British",
+      "occupation": "Company Director",
+      "resigned_on": "2019-11-30"
+    }
+  ],
+  "active_count": 2,
+  "total_results": 3
+}

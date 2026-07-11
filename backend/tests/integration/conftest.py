@@ -1,13 +1,19 @@
+import json
 import uuid
+from pathlib import Path
 
+import httpx
 import pytest
 from fastapi import Header, HTTPException, status
 from fastapi.testclient import TestClient
 
-from api.deps import get_current_user
+from api.deps import get_companies_house_client, get_current_user
 from api.main import app
 from db.models import User
 from db.session import raw_session
+from services.companies_house import CompaniesHouseClient
+
+FIXTURES = Path(__file__).resolve().parents[3] / "data" / "fixtures" / "companies_house"
 
 
 @pytest.fixture
@@ -55,3 +61,38 @@ def client_as():
 
     yield _client
     app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.fixture
+def companies_house_fixture():
+    """Overrides get_companies_house_client with one backed by local
+    fixtures — no route test in this repo ever calls the real API."""
+    profiles = {
+        "12345678": json.loads((FIXTURES / "company_profile_active.json").read_text()),
+        "87654321": json.loads((FIXTURES / "company_profile_dormant_micro.json").read_text()),
+    }
+    officers = {
+        "12345678": json.loads((FIXTURES / "officers_active.json").read_text()),
+        "87654321": json.loads((FIXTURES / "officers_empty.json").read_text()),
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        parts = request.url.path.strip("/").split("/")
+        company_number = parts[1]
+        if len(parts) == 2:
+            data = profiles.get(company_number)
+        elif len(parts) == 3 and parts[2] == "officers":
+            data = officers.get(company_number)
+        else:
+            data = None
+        if data is None:
+            return httpx.Response(404, json={"errors": [{"error": "not-found"}]})
+        return httpx.Response(200, json=data)
+
+    def _override():
+        with CompaniesHouseClient(api_key="test", transport=httpx.MockTransport(handler)) as c:
+            yield c
+
+    app.dependency_overrides[get_companies_house_client] = _override
+    yield
+    app.dependency_overrides.pop(get_companies_house_client, None)

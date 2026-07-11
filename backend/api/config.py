@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     # every real deployment must override this.
     app_secret_key: str = "dev-only-insecure-secret-key-change-me"
 
+    # Companies House public data API — see docs/runbooks/companies-house-setup.md.
+    companies_house_api_key: str | None = None
+    companies_house_base_url: str = "https://api.company-information.service.gov.uk"
+
 
 @lru_cache
 def get_settings() -> Settings:
