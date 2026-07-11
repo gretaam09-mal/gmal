@@ -54,12 +54,14 @@ services:
     runtime: node
     plan: free
     rootDir: frontend
-    # corepack (bundled with Node), not `npm install -g pnpm` — Render's
-    # build image has a read-only system node_modules, so a global npm
-    # install fails with EROFS. corepack's shim lives in the writable
-    # user home directory instead.
-    buildCommand: corepack enable && corepack prepare pnpm@10 --activate && pnpm install --frozen-lockfile && pnpm build
-    startCommand: corepack enable && pnpm start -p $PORT
+    # npx, not `npm install -g pnpm` (Render's build image has a
+    # read-only system node_modules, so a global install fails with
+    # EROFS) and not corepack (its package-signature verification hits
+    # a known keyid-mismatch bug on Render's current Node build). npx
+    # just installs pnpm like any other npm package, no global write,
+    # no signature step.
+    buildCommand: npx --yes pnpm@10 install --frozen-lockfile && npx --yes pnpm@10 build
+    startCommand: npx --yes pnpm@10 start -p $PORT
     envVars:
       - key: NODE_VERSION
         value: 22.11.0
