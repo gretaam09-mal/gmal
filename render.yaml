@@ -54,8 +54,12 @@ services:
     runtime: node
     plan: free
     rootDir: frontend
-    buildCommand: npm install -g pnpm@10 && pnpm install --frozen-lockfile && pnpm build
-    startCommand: pnpm start -p $PORT
+    # corepack (bundled with Node), not `npm install -g pnpm` — Render's
+    # build image has a read-only system node_modules, so a global npm
+    # install fails with EROFS. corepack's shim lives in the writable
+    # user home directory instead.
+    buildCommand: corepack enable && corepack prepare pnpm@10 --activate && pnpm install --frozen-lockfile && pnpm build
+    startCommand: corepack enable && pnpm start -p $PORT
     envVars:
       - key: NODE_VERSION
         value: 22.11.0
