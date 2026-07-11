@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/design-system/components/button";
+import { ProfileEditor } from "@/features/profile/components/ProfileEditor";
 
 import { createTenant, createWorkspace, listWorkspaces } from "../api";
 import type { Workspace } from "../types";
@@ -11,12 +12,14 @@ import { MembersPanel } from "./MembersPanel";
 import { RoleBadge } from "./RoleBadge";
 
 const LAST_TENANT_KEY = "provision:lastTenantId";
+type Tab = "profile" | "members";
 
 export function WorkspaceDashboard() {
   const { getToken } = useAuth();
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<Tab>("profile");
 
   useEffect(() => {
     const stored = typeof window !== "undefined" ? window.localStorage.getItem(LAST_TENANT_KEY) : null;
@@ -90,7 +93,28 @@ export function WorkspaceDashboard() {
                   <p className="font-ui text-sm text-ink/50">codename: {selectedWorkspace.codename}</p>
                 ) : null}
               </div>
-              <MembersPanel workspace={selectedWorkspace} getToken={getToken} />
+
+              <div className="flex gap-4 border-b border-ink/10">
+                {(["profile", "members"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`pb-2 font-ui text-sm capitalize ${
+                      tab === activeTab
+                        ? "border-b-2 border-primary-navy text-ink"
+                        : "text-ink/50 hover:text-ink"
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+
+              {activeTab === "profile" ? (
+                <ProfileEditor workspaceId={selectedWorkspace.id} />
+              ) : (
+                <MembersPanel workspace={selectedWorkspace} getToken={getToken} />
+              )}
             </div>
           ) : (
             <p className="font-ui text-sm text-ink/60">Select or create a workspace to get started.</p>
