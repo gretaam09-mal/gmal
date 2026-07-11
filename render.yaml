@@ -74,3 +74,17 @@ services:
         sync: false
       - key: CLERK_SECRET_KEY
         sync: false
+      # Without these, Clerk's middleware falls back to redirecting
+      # unauthenticated visitors to the hosted Account Portal on Clerk's
+      # own accounts.dev domain rather than our own /sign-in and
+      # /sign-up pages — an extra cross-domain hop that hangs on this
+      # dev instance. Pointing everything at our own routes keeps the
+      # whole flow same-origin.
+      - key: NEXT_PUBLIC_CLERK_SIGN_IN_URL
+        value: /sign-in
+      - key: NEXT_PUBLIC_CLERK_SIGN_UP_URL
+        value: /sign-up
+      - key: NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL
+        value: /dashboard
+      - key: NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL
+        value: /dashboard
