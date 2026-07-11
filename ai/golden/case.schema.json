@@ -1,13 +1,26 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Golden case",
+  "title": "Golden case for P-EXTRACT",
   "type": "object",
   "required": ["id", "input", "expected"],
   "properties": {
     "id": { "type": "string" },
     "description": { "type": "string" },
-    "input": { "type": "object" },
-    "expected": { "type": "object" }
+    "input": {
+      "type": "object",
+      "required": ["raw_model_output"],
+      "properties": {
+        "raw_model_output": {
+          "type": "object",
+          "description": "A pinned JSON blob shaped exactly like what P-EXTRACT (ai/prompts/P-EXTRACT.v1.md) returns for one clause — see backend/services/extraction/schemas.py::ExtractedObligation for the shape it must validate against."
+        }
+      },
+      "additionalProperties": false
+    },
+    "expected": {
+      "type": "object",
+      "description": "ExtractedObligation.model_validate(input.raw_model_output).model_dump(mode='json') — the runner fails if these ever diverge, which is exactly the regression this guards against: a schema change or provider bug silently altering what a clause extracts to."
+    }
   },
   "additionalProperties": false
 }

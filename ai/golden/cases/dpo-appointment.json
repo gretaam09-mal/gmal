@@ -1,0 +1,26 @@
+{
+  "id": "dpo-appointment",
+  "description": "A firm processing personal data at scale must appoint a data protection officer — every field has a distinct clause citation and a high confidence.",
+  "input": {
+    "raw_model_output": {
+      "summary": "A firm processing personal data at scale must appoint a data protection officer.",
+      "obligation_type": "appointment",
+      "who": {"value": "firms processing personal data at scale", "clause_ref": "s.4(1)", "confidence": 92},
+      "what": {"value": "appoint a data protection officer", "clause_ref": "s.4(1)", "confidence": 95},
+      "when": {"value": "within 30 days of exceeding the threshold", "clause_ref": "s.4(2)", "confidence": 80},
+      "threshold": {"value": "processes personal data at scale", "clause_ref": "s.4(1)", "confidence": 85},
+      "enforcer": {"value": "the Information Commissioner's Office", "clause_ref": "s.4(3)", "confidence": 75},
+      "confidence": 88
+    }
+  },
+  "expected": {
+    "summary": "A firm processing personal data at scale must appoint a data protection officer.",
+    "obligation_type": "appointment",
+    "who": {"value": "firms processing personal data at scale", "clause_ref": "s.4(1)", "confidence": 92},
+    "what": {"value": "appoint a data protection officer", "clause_ref": "s.4(1)", "confidence": 95},
+    "when": {"value": "within 30 days of exceeding the threshold", "clause_ref": "s.4(2)", "confidence": 80},
+    "threshold": {"value": "processes personal data at scale", "clause_ref": "s.4(1)", "confidence": 85},
+    "enforcer": {"value": "the Information Commissioner's Office", "clause_ref": "s.4(3)", "confidence": 75},
+    "confidence": 88
+  }
+}

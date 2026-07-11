@@ -131,5 +131,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Run golden-set stub runner
-        run: python3 ai/eval/run_golden_set.py
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install backend dependencies
+        # The runner imports services.extraction.schemas (see
+        # ai/eval/run_golden_set.py) to validate each case against the
+        # real ExtractedObligation schema — not a stub.
+        working-directory: backend
+        run: poetry install --no-root
+
+      - name: Run golden-set regression runner
+        working-directory: backend
+        run: poetry run python3 ../ai/eval/run_golden_set.py
