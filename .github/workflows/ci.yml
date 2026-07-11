@@ -12,6 +12,24 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # conftest.py defaults to this exact URL if unset — set explicitly
+      # anyway so it's obvious what the backend job depends on.
+      PROVISION_DATABASE_URL: postgresql+psycopg://provision:provision@localhost:5432/provision_test
     steps:
       - uses: actions/checkout@v4
 
@@ -25,10 +43,21 @@ jobs:
       - name: Install dependencies
         run: poetry install --no-root
 
+      - name: Create app role, test database, and pgvector extension
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -c \
+            "CREATE ROLE provision LOGIN PASSWORD 'provision';"
+          PGPASSWORD=postgres psql -h localhost -U postgres -c \
+            "CREATE DATABASE provision_test OWNER provision;"
+          PGPASSWORD=postgres psql -h localhost -U postgres -d provision_test -c \
+            "CREATE EXTENSION IF NOT EXISTS vector;"
+          PGPASSWORD=postgres psql -h localhost -U postgres -d provision_test -c \
+            "GRANT ALL ON SCHEMA public TO provision;"
+
       - name: Lint
         run: poetry run ruff check .
 
-      - name: Unit tests
+      - name: Unit and integration tests
         run: poetry run pytest
 
   frontend-unit:

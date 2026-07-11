@@ -1,0 +1,28 @@
+{
+  "company_name": "EXAMPLE TARGET LIMITED",
+  "company_number": "12345678",
+  "company_status": "active",
+  "type": "ltd",
+  "jurisdiction": "england-wales",
+  "date_of_creation": "2015-03-12",
+  "sic_codes": ["62012", "62020"],
+  "registered_office_address": {
+    "address_line_1": "1 Example Street",
+    "locality": "London",
+    "postal_code": "EC1A 1AA",
+    "country": "United Kingdom"
+  },
+  "accounts": {
+    "accounting_reference_date": { "day": "31", "month": "12" },
+    "last_accounts": {
+      "made_up_to": "2024-12-31",
+      "type": "small"
+    },
+    "next_due": "2026-09-30",
+    "overdue": false
+  },
+  "confirmation_statement": {
+    "next_due": "2026-04-01",
+    "overdue": false
+  }
+}

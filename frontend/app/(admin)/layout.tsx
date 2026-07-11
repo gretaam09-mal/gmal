@@ -1,3 +1,11 @@
+import { ConditionalClerkProvider } from "@/lib/clerk";
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  return <div data-route-group="admin">{children}</div>;
+  return (
+    <ConditionalClerkProvider>
+      <div data-route-group="admin" className="min-h-screen bg-paper">
+        {children}
+      </div>
+    </ConditionalClerkProvider>
+  );
 }
