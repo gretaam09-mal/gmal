@@ -11,11 +11,12 @@ fastapi = "^0.115.0"
 uvicorn = {extras = ["standard"], version = "^0.32.0"}
 sqlalchemy = "^2.0.36"
 alembic = "^1.14.0"
-pydantic = "^2.9.2"
+pydantic = {extras = ["email"], version = "^2.13.4"}
 pydantic-settings = "^2.6.1"
 psycopg = {extras = ["binary"], version = "^3.2.3"}
 procrastinate = {extras = ["psycopg"], version = "^2.15.0"}
 pgvector = "^0.3.6"
+pyjwt = {version = "^2.9.0", extras = ["crypto"]}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.3"
@@ -38,6 +39,11 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+"db/migrations/versions/*.py" = ["E501"]
+"api/deps.py" = ["B008"]
+"api/routes/*.py" = ["B008"]
 
 [tool.mypy]
 python_version = "3.12"
