@@ -8,6 +8,7 @@ from api.routes import (
     health,
     invites,
     me,
+    memos,
     profiles,
     roles,
     tenants,
@@ -35,4 +36,5 @@ app.include_router(workspaces.router)
 app.include_router(invites.router)
 app.include_router(profiles.router)
 app.include_router(analyses.router)
+app.include_router(memos.router)
 app.include_router(admin_instruments.router)

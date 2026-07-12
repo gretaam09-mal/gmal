@@ -342,3 +342,65 @@ class AnalysisOut(BaseModel):
     base_currency: str
     created_at: datetime
     items: list[AnalysisItemOut]
+
+
+class MemoCreateRequest(BaseModel):
+    analysis_id: uuid.UUID
+    title: str = Field(min_length=1, max_length=300)
+
+
+class AssumptionOut(BaseModel):
+    id: uuid.UUID
+    key: str
+    value: dict[str, Any]
+    source: str
+    note: str | None
+
+    model_config = {"from_attributes": True}
+
+
+class MemoVersionOut(BaseModel):
+    id: uuid.UUID
+    memo_id: uuid.UUID
+    version: int
+    status: str
+    content: dict[str, Any]
+    confidence_grade: str | None
+    approved_at: datetime | None
+    approved_by_user_id: uuid.UUID | None
+    created_by_user_id: uuid.UUID
+    created_at: datetime
+    assumptions: list[AssumptionOut]
+
+
+class MemoOut(BaseModel):
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    analysis_id: uuid.UUID | None
+    title: str
+    created_by_user_id: uuid.UUID
+    created_at: datetime
+    versions: list[MemoVersionOut]
+
+
+class AssumptionOverrideRequest(BaseModel):
+    value: dict[str, Any]
+    note: str | None = None
+
+
+class ChangeOut(BaseModel):
+    field: str
+    kind: str
+    before: str | None
+    after: str | None
+    delta: str | None
+
+
+class AssumptionOverrideResponse(BaseModel):
+    version: MemoVersionOut
+    change_note: str
+    changes: list[ChangeOut]
+
+
+class NewVersionRequest(BaseModel):
+    change_note: str = Field(min_length=1, max_length=1000)
