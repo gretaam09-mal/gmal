@@ -4,6 +4,7 @@ import type {
   CostTemplate,
   Instrument,
   InstrumentDetail,
+  MonthlyMetricsReport,
   Obligation,
   ObligationFields,
   OnboardingMetric,
@@ -128,3 +129,14 @@ export const attachCostTemplate = (
 
 export const listOnboardingMetrics = (getToken: GetToken) =>
   apiFetch<OnboardingMetric[]>("/admin/metrics/onboarding", { getToken });
+
+export const getMonthlyMetricsReport = (getToken: GetToken, year?: number, month?: number) => {
+  const params = new URLSearchParams();
+  if (year) params.set("year", String(year));
+  if (month) params.set("month", String(month));
+  const query = params.toString();
+  return apiFetch<MonthlyMetricsReport>(
+    `/admin/metrics/monthly-report${query ? `?${query}` : ""}`,
+    { getToken },
+  );
+};

@@ -87,3 +87,15 @@ export interface OnboardingMetric {
   started_at: string;
   completed_at: string;
 }
+
+export interface MonthlyMetricsReport {
+  period_start: string;
+  period_end: string;
+  time_to_exposure_list_minutes_avg: number | null;
+  time_to_approved_memo_minutes_avg: number | null;
+  review_minutes_avg: number | null;
+  onboarding_hours_avg: number | null;
+  override_count: number;
+  memos_approved_count: number;
+  used_in_ic_count: number;
+}
