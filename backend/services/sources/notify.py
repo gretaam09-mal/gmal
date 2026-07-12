@@ -28,7 +28,7 @@ def notify_affected_memos(
         )
         memo_lines = "\n".join(f"- {memo.memo_title}" for memo in flagged_memos)
         body = (
-            "The following approved memos in your workspace now show \"inputs "
+            "The following approved memos in your assessment now show \"inputs "
             "changed\", because a regulatory source they relied on was updated:\n\n"
             f"{memo_lines}\n\n"
             "Open each memo to review what changed, then re-run it once the "
@@ -37,7 +37,7 @@ def notify_affected_memos(
         for recipient in recipients:
             message = EmailMessage(
                 to=recipient,
-                subject="Provision: inputs changed for memos in your workspace",
+                subject="Provision: inputs changed for memos in your assessment",
                 body=body,
             )
             email_provider.send(message)

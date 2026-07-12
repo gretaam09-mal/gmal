@@ -87,7 +87,7 @@ async def create_analysis(
         profile = get_current_profile(session, membership.workspace_id)
         if profile is None:
             raise HTTPException(
-                status.HTTP_409_CONFLICT, "This workspace has no entity profile yet"
+                status.HTTP_409_CONFLICT, "This assessment has no entity profile yet"
             )
         entity_profile_id = profile.id
 

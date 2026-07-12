@@ -26,7 +26,7 @@ async def create_tenant(
         session.flush()
     except IntegrityError as exc:
         session.rollback()
-        detail = "A tenant with that slug already exists"
+        detail = "An organisation with that slug already exists"
         raise HTTPException(status.HTTP_409_CONFLICT, detail) from exc
 
     set_rls_context(session, tenant.id, None)
@@ -52,7 +52,7 @@ async def get_tenant(
 ) -> Tenant:
     tenant = session.get(Tenant, tenant_id)
     if tenant is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Organisation not found")
     return tenant
 
 
@@ -83,11 +83,11 @@ async def create_workspace(
 ) -> WorkspaceOut:
     tenant = session.get(Tenant, tenant_id)
     if tenant is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Organisation not found")
     if not _can_create_workspace(session, tenant, current_user):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            "Only the tenant's creator or an existing member can add a workspace",
+            "Only the organisation's creator or an existing member can add an assessment",
         )
 
     set_rls_context(session, tenant.id, None)
@@ -103,7 +103,8 @@ async def create_workspace(
     except IntegrityError as exc:
         session.rollback()
         raise HTTPException(
-            status.HTTP_409_CONFLICT, "A workspace with that codename already exists in this tenant"
+            status.HTTP_409_CONFLICT,
+            "An assessment with that name already exists in this organisation",
         ) from exc
 
     # Narrow to the new workspace for its first membership + audit rows.
