@@ -1,2 +1,2 @@
-// Memo composition and viewing. Empty skeleton — Phase 1.
-export {};
+export { MemoView } from "./components/MemoView";
+export type { Assumption, Change, Memo, MemoStatus, MemoVersion } from "./types";
