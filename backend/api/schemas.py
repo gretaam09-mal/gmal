@@ -359,6 +359,17 @@ class AssumptionOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ReviewOut(BaseModel):
+    id: uuid.UUID
+    reviewer_user_id: uuid.UUID
+    decision: str
+    comment: str | None
+    panel_firm: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class MemoVersionOut(BaseModel):
     id: uuid.UUID
     memo_id: uuid.UUID
@@ -366,11 +377,15 @@ class MemoVersionOut(BaseModel):
     status: str
     content: dict[str, Any]
     confidence_grade: str | None
+    submitted_at: datetime | None
     approved_at: datetime | None
     approved_by_user_id: uuid.UUID | None
     created_by_user_id: uuid.UUID
     created_at: datetime
     assumptions: list[AssumptionOut]
+    reviews: list[ReviewOut]
+    inputs_changed: bool
+    stale_reasons: list[str]
 
 
 class MemoOut(BaseModel):
@@ -380,7 +395,28 @@ class MemoOut(BaseModel):
     title: str
     created_by_user_id: uuid.UUID
     created_at: datetime
+    used_in_ic: bool
     versions: list[MemoVersionOut]
+
+
+class ReviewQueueEntryOut(BaseModel):
+    memo_id: uuid.UUID
+    memo_title: str
+    version_id: uuid.UUID
+    version_number: int
+    status: str
+    confidence_grade: str | None
+    ambiguous_count: int
+    submitted_at: datetime | None
+    created_at: datetime
+
+
+class ApproveMemoRequest(BaseModel):
+    panel_firm: str | None = None
+
+
+class UsedInIcRequest(BaseModel):
+    used_in_ic: bool
 
 
 class AssumptionOverrideRequest(BaseModel):
@@ -404,3 +440,91 @@ class AssumptionOverrideResponse(BaseModel):
 
 class NewVersionRequest(BaseModel):
     change_note: str = Field(min_length=1, max_length=1000)
+
+
+class ObligationCorrectionRequest(BaseModel):
+    summary: str = Field(min_length=1, max_length=500)
+    obligation_type: str = Field(min_length=1, max_length=100)
+    fields: dict[str, Any]
+    confidence: int = Field(ge=0, le=100)
+    note: str = Field(min_length=1, max_length=1000)
+
+
+class CostTemplateCorrectionRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    drivers: list[dict[str, Any]] = Field(default_factory=list)
+    formula: dict[str, Any]
+    currency: str = Field(default="GBP", max_length=10)
+    source_basis: str = Field(min_length=1, max_length=200)
+    maturity_tier: str = Field(min_length=1, max_length=50)
+    note: str = Field(min_length=1, max_length=1000)
+    first_obligation_date: date | None = None
+    transition_months: int = Field(default=0, ge=0)
+
+
+class CorrectionOut(BaseModel):
+    id: uuid.UUID
+    memo_version_id: uuid.UUID
+    obligation_id: uuid.UUID | None
+    cost_template_id: uuid.UUID | None
+    corrected_by_user_id: uuid.UUID
+    note: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# --- F10: monthly metrics report ---------------------------------------------
+
+
+class MonthlyMetricsReportOut(BaseModel):
+    period_start: datetime
+    period_end: datetime
+    time_to_exposure_list_minutes_avg: float | None
+    time_to_approved_memo_minutes_avg: float | None
+    review_minutes_avg: float | None
+    onboarding_hours_avg: float | None
+    override_count: int
+    memos_approved_count: int
+    used_in_ic_count: int
+
+
+# --- F10: internal error register --------------------------------------------
+
+
+class ErrorEntryCreateRequest(BaseModel):
+    source: str = Field(min_length=1, max_length=200)
+    message: str = Field(min_length=1, max_length=2000)
+    context: dict | None = None
+    tenant_id: uuid.UUID | None = None
+    workspace_id: uuid.UUID | None = None
+
+
+class SetRootCauseRequest(BaseModel):
+    root_cause: str = Field(min_length=1, max_length=2000)
+
+
+class AddAffectedWorkspaceRequest(BaseModel):
+    workspace_id: uuid.UUID
+
+
+class SendDisclosureRequest(BaseModel):
+    disclosure_note: str = Field(min_length=1, max_length=4000)
+    affected_tenant_ids_by_workspace: dict[str, uuid.UUID]
+
+
+class ErrorEntryOut(BaseModel):
+    id: uuid.UUID
+    tenant_id: uuid.UUID | None
+    workspace_id: uuid.UUID | None
+    source: str
+    message: str
+    context: dict | None
+    resolved_at: datetime | None
+    root_cause: str | None
+    affected_workspace_ids: list[str]
+    disclosure_note: str | None
+    disclosure_sent_at: datetime | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

@@ -11,8 +11,10 @@ import {
   approveMemoVersion,
   createMemo,
   createNewMemoVersion,
+  downloadMemoExport,
   listMemos,
   overrideAssumption,
+  setMemoUsedInIc,
   submitMemoVersion,
 } from "../api";
 import type { Assumption, Change, Memo, MemoVersion } from "../types";
@@ -20,6 +22,7 @@ import { AssumptionRegister } from "./AssumptionRegister";
 import { ExcludedSection } from "./ExcludedSection";
 import { ObligationCard } from "./ObligationCard";
 import { RangeBar } from "./RangeBar";
+import { StalenessBanner } from "./StalenessBanner";
 import { StatusBadge } from "./StatusBadge";
 import { Waterfall } from "./Waterfall";
 
@@ -127,10 +130,17 @@ export function MemoView({ workspaceId, myRole }: { workspaceId: string; myRole:
     if (!memo) return;
     const version = latestVersion(memo);
     if (!version) return;
+    const panelFirm = window.prompt("Panel firm (optional):") ?? "";
     setBusy(true);
     setError(null);
     try {
-      const updated = await approveMemoVersion(getToken, workspaceId, memo.id, version.id);
+      const updated = await approveMemoVersion(
+        getToken,
+        workspaceId,
+        memo.id,
+        version.id,
+        panelFirm,
+      );
       setMemo({
         ...memo,
         versions: memo.versions.map((v) => (v.id === updated.id ? updated : v)),
@@ -139,6 +149,39 @@ export function MemoView({ workspaceId, myRole }: { workspaceId: string; myRole:
       setError(err instanceof Error ? err.message : "Approve failed");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleToggleUsedInIc() {
+    if (!memo) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await setMemoUsedInIc(getToken, workspaceId, memo.id, !memo.used_in_ic);
+      setMemo({ ...memo, used_in_ic: updated.used_in_ic });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update used-in-IC tag");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleExport(kind: "pdf" | "docx") {
+    if (!memo) return;
+    const version = latestVersion(memo);
+    if (!version) return;
+    setError(null);
+    try {
+      await downloadMemoExport(
+        getToken,
+        workspaceId,
+        memo.id,
+        version.id,
+        kind,
+        `${memo.title}.${kind}`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to export ${kind.toUpperCase()}`);
     }
   }
 
@@ -222,14 +265,44 @@ export function MemoView({ workspaceId, myRole }: { workspaceId: string; myRole:
               Create new version
             </Button>
           ) : null}
+          <Button size="dense" variant="outline" onClick={() => handleExport("pdf")}>
+            Export PDF
+          </Button>
+          <Button size="dense" variant="outline" onClick={() => handleExport("docx")}>
+            Export DOCX
+          </Button>
         </div>
       </div>
 
+      {canDraft ? (
+        <label className="flex items-center gap-2 font-ui text-xs text-ink/70">
+          <input
+            type="checkbox"
+            checked={memo.used_in_ic}
+            onChange={handleToggleUsedInIc}
+            disabled={busy}
+          />
+          Used in IC pack
+        </label>
+      ) : null}
+
       {error ? <p className="font-ui text-xs text-red-600">{error}</p> : null}
+
+      <StalenessBanner reasons={version.stale_reasons} />
 
       {content.change_note ? (
         <p className="rounded-md bg-amber-50 p-3 font-ui text-xs text-amber-800">
           Supersedes version {content.superseded_version}: {content.change_note}
+        </p>
+      ) : null}
+
+      {version.reviews.length > 0 ? (
+        <p className="font-ui text-xs text-ink/50">
+          {version.reviews
+            .map((review) =>
+              review.panel_firm ? `${review.decision} — ${review.panel_firm}` : review.decision,
+            )
+            .join(", ")}
         </p>
       ) : null}
 

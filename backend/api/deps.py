@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from db.models import Membership, MembershipStatus, Role, User
 from db.session import raw_session, set_user_context, workspace_session
+from services.audit import record_audit_event
 from services.auth.clerk import ClerkAuthError, verify_clerk_token
 from services.companies_house import CompaniesHouseClient
 
@@ -54,6 +55,15 @@ def get_current_user(
             email=claims.email or f"{claims.clerk_user_id}@users.provision.invalid",
         )
         session.add(user)
+        session.flush()
+        record_audit_event(
+            session,
+            tenant_id=None,
+            actor_user_id=user.id,
+            action="auth.first_sign_in",
+            entity_type="user",
+            entity_id=user.id,
+        )
         session.commit()
         session.refresh(user)
     return user

@@ -56,11 +56,16 @@ export function InstrumentList() {
 
   return (
     <div className="flex flex-col gap-8 p-8">
-      <header>
-        <h1 className="font-ui text-2xl font-semibold text-ink">Instrument onboarding</h1>
-        <p className="font-ui text-sm text-ink/60">
-          Internal workbench — never linked from the client app.
-        </p>
+      <header className="flex items-start justify-between">
+        <div>
+          <h1 className="font-ui text-2xl font-semibold text-ink">Instrument onboarding</h1>
+          <p className="font-ui text-sm text-ink/60">
+            Internal workbench — never linked from the client app.
+          </p>
+        </div>
+        <Link href="/admin/metrics" className="font-ui text-sm text-primary-navy hover:underline">
+          Monthly metrics report →
+        </Link>
       </header>
 
       <section className="flex flex-col gap-3">

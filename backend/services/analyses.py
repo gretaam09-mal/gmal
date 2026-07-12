@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, NamedTuple
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from db.models import (
@@ -26,6 +26,7 @@ from db.models import (
     AnalysisItem,
     Clause,
     CostTemplate,
+    EntityProfile,
     Instrument,
     InstrumentVersion,
     Memo,
@@ -47,6 +48,7 @@ from engine.impact import (
 )
 from engine.predicates import PredicateOutcome, evaluate_predicate
 from engine.rationale import build_rationale
+from services.metrics import record_exposure_list_generated
 from services.scenarios import get_latest_scenario_weights
 
 ENGINE_VERSION = "1"
@@ -151,6 +153,13 @@ def run_analysis(
     so a later memo can show exactly what produced its present-value
     figures.
     """
+    is_first_analysis = (
+        session.execute(
+            select(func.count()).select_from(Analysis).where(Analysis.workspace_id == workspace_id)
+        ).scalar()
+        == 0
+    )
+
     analysis = Analysis(
         tenant_id=tenant_id,
         workspace_id=workspace_id,
@@ -245,6 +254,23 @@ def run_analysis(
 
     analysis.status = AnalysisStatus.COMPLETE
     session.flush()
+
+    if is_first_analysis:
+        first_profile_version = session.execute(
+            select(EntityProfile)
+            .where(EntityProfile.workspace_id == workspace_id)
+            .order_by(EntityProfile.version.asc())
+        ).scalars().first()
+        if first_profile_version is not None:
+            record_exposure_list_generated(
+                session,
+                tenant_id=tenant_id,
+                workspace_id=workspace_id,
+                entity_profile_id=entity_profile_id,
+                entity_profile_created_at=first_profile_version.recorded_at,
+                generated_at=now,
+            )
+
     return analysis
 
 

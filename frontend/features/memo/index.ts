@@ -1,2 +1,3 @@
 export { MemoView } from "./components/MemoView";
-export type { Assumption, Change, Memo, MemoStatus, MemoVersion } from "./types";
+export { ReviewerQueue } from "./components/ReviewerQueue";
+export type { Assumption, Change, Memo, MemoStatus, MemoVersion, Review, ReviewQueueEntry } from "./types";

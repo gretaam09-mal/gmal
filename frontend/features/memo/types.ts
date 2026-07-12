@@ -52,6 +52,15 @@ export interface Assumption {
   note: string | null;
 }
 
+export interface Review {
+  id: string;
+  reviewer_user_id: string;
+  decision: string;
+  comment: string | null;
+  panel_firm: string | null;
+  created_at: string;
+}
+
 export interface MemoVersion {
   id: string;
   memo_id: string;
@@ -59,11 +68,15 @@ export interface MemoVersion {
   status: MemoStatus;
   content: MemoContent;
   confidence_grade: string | null;
+  submitted_at: string | null;
   approved_at: string | null;
   approved_by_user_id: string | null;
   created_by_user_id: string;
   created_at: string;
   assumptions: Assumption[];
+  reviews: Review[];
+  inputs_changed: boolean;
+  stale_reasons: string[];
 }
 
 export interface Memo {
@@ -73,7 +86,20 @@ export interface Memo {
   title: string;
   created_by_user_id: string;
   created_at: string;
+  used_in_ic: boolean;
   versions: MemoVersion[];
+}
+
+export interface ReviewQueueEntry {
+  memo_id: string;
+  memo_title: string;
+  version_id: string;
+  version_number: number;
+  status: MemoStatus;
+  confidence_grade: string | null;
+  ambiguous_count: number;
+  submitted_at: string | null;
+  created_at: string;
 }
 
 export interface Change {

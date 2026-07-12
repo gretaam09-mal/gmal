@@ -14,8 +14,16 @@ from db.models.enums import (
     SourceDocumentStatus,
     SweepRunStatus,
 )
-from db.models.memo import Assumption, Memo, MemoVersion, Review
+from db.models.memo import (
+    Assumption,
+    Memo,
+    MemoInputChangeFlag,
+    MemoVersion,
+    Review,
+    ReviewCorrection,
+)
 from db.models.ops import (
+    CuratedSource,
     ErrorRegisterEntry,
     ForecastLogEntry,
     MetricsEvent,
@@ -43,6 +51,7 @@ __all__ = [
     "AuditEvent",
     "Clause",
     "CostTemplate",
+    "CuratedSource",
     "EntityProfile",
     "ErrorRegisterEntry",
     "ForecastLogEntry",
@@ -51,6 +60,7 @@ __all__ = [
     "Membership",
     "MembershipStatus",
     "Memo",
+    "MemoInputChangeFlag",
     "MemoStatus",
     "MemoVersion",
     "MetricsEvent",
@@ -61,6 +71,7 @@ __all__ = [
     "ProfileFieldSource",
     "Report",
     "Review",
+    "ReviewCorrection",
     "ReviewDecision",
     "Role",
     "SourceDocument",

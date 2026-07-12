@@ -99,6 +99,54 @@ def ingest_instrument(
     return version
 
 
+def ingest_new_instrument_version(
+    session: Session,
+    *,
+    instrument: Instrument,
+    version_label: str,
+    source_url: str | None,
+    raw_text: str,
+) -> InstrumentVersion:
+    """F9: a curated source's content changed — close the instrument's
+    current version's valid_to and record a fresh one with its own
+    clauses, the same close-then-insert pattern correct_obligation uses.
+    The new version's obligations/predicates start unapproved, so it
+    surfaces in the onboarding workbench exactly like a first ingest."""
+    now = datetime.now(UTC)
+    current = session.execute(
+        select(InstrumentVersion).where(
+            InstrumentVersion.instrument_id == instrument.id,
+            InstrumentVersion.valid_to.is_(None),
+        )
+    ).scalar_one()
+    current.valid_to = now
+    session.flush()
+
+    version = InstrumentVersion(
+        instrument_id=instrument.id,
+        version_label=version_label,
+        source_url=source_url,
+        content_hash=hash_text(raw_text),
+        raw_text=raw_text,
+        valid_from=now,
+    )
+    session.add(version)
+    session.flush()
+
+    for segment in segment_clauses(raw_text):
+        session.add(
+            Clause(
+                instrument_version_id=version.id,
+                clause_ref=segment.clause_ref,
+                text=segment.text,
+                ordinal=segment.ordinal,
+                valid_from=now,
+            )
+        )
+    session.flush()
+    return version
+
+
 def list_clauses(session: Session, instrument_version_id: uuid.UUID) -> list[Clause]:
     return list(
         session.execute(

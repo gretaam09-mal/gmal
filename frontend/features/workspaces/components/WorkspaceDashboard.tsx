@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/design-system/components/button";
 import { ExposureList } from "@/features/exposure";
-import { MemoView } from "@/features/memo";
+import { MemoView, ReviewerQueue } from "@/features/memo";
 import { ProfileEditor } from "@/features/profile/components/ProfileEditor";
 
 import { createTenant, createWorkspace, listWorkspaces } from "../api";
@@ -14,7 +14,7 @@ import { MembersPanel } from "./MembersPanel";
 import { RoleBadge } from "./RoleBadge";
 
 const LAST_TENANT_KEY = "provision:lastTenantId";
-type Tab = "profile" | "exposure" | "memo" | "members";
+type Tab = "profile" | "exposure" | "memo" | "review" | "members";
 
 export function WorkspaceDashboard() {
   const { getToken } = useAuth();
@@ -97,7 +97,7 @@ export function WorkspaceDashboard() {
               </div>
 
               <div className="flex gap-4 border-b border-ink/10">
-                {(["profile", "exposure", "memo", "members"] as const).map((tab) => (
+                {(["profile", "exposure", "memo", "review", "members"] as const).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
@@ -121,6 +121,11 @@ export function WorkspaceDashboard() {
                 />
               ) : activeTab === "memo" ? (
                 <MemoView workspaceId={selectedWorkspace.id} myRole={selectedWorkspace.my_role} />
+              ) : activeTab === "review" ? (
+                <ReviewerQueue
+                  workspaceId={selectedWorkspace.id}
+                  onSelectMemo={() => setActiveTab("memo")}
+                />
               ) : (
                 <MembersPanel workspace={selectedWorkspace} getToken={getToken} />
               )}

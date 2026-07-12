@@ -17,16 +17,34 @@ from api.deps import (
     require_role,
 )
 from api.schemas import (
+    ApproveMemoRequest,
     AssumptionOut,
     AssumptionOverrideRequest,
     AssumptionOverrideResponse,
     ChangeOut,
+    CorrectionOut,
+    CostTemplateCorrectionRequest,
     MemoCreateRequest,
     MemoOut,
     MemoVersionOut,
     NewVersionRequest,
+    ObligationCorrectionRequest,
+    ReviewOut,
+    ReviewQueueEntryOut,
+    UsedInIcRequest,
 )
-from db.models import Analysis, Assumption, Membership, Memo, MemoVersion, Role, User
+from db.models import (
+    Analysis,
+    Assumption,
+    Membership,
+    Memo,
+    MemoInputChangeFlag,
+    MemoVersion,
+    Obligation,
+    Review,
+    Role,
+    User,
+)
 from services.audit import record_audit_event
 from services.composition.provider import CompositionError, CompositionProvider
 from services.diff_note.provider import DiffNoteError, DiffNoteProvider
@@ -38,6 +56,11 @@ from services.memo import (
     create_new_version_from_approved,
     override_assumption_and_recompute,
     submit_for_review,
+)
+from services.review import (
+    list_review_queue,
+    record_cost_template_correction,
+    record_obligation_correction,
 )
 
 router = APIRouter(tags=["memos"])
@@ -59,7 +82,28 @@ def _assumptions_for(session: Session, memo_version_id: uuid.UUID) -> list[Assum
     )
 
 
-def _version_out(version: MemoVersion, assumptions: list[Assumption]) -> MemoVersionOut:
+def _reviews_for(session: Session, memo_version_id: uuid.UUID) -> list[Review]:
+    return list(
+        session.execute(
+            select(Review).where(Review.memo_version_id == memo_version_id)
+        ).scalars()
+    )
+
+
+def _stale_reasons_for(session: Session, memo_version_id: uuid.UUID) -> list[str]:
+    return list(
+        session.execute(
+            select(MemoInputChangeFlag.description).where(
+                MemoInputChangeFlag.memo_version_id == memo_version_id
+            )
+        ).scalars()
+    )
+
+
+def _version_out(session: Session, version: MemoVersion) -> MemoVersionOut:
+    stale_reasons = _stale_reasons_for(session, version.id)
+    assumptions = _assumptions_for(session, version.id)
+    reviews = _reviews_for(session, version.id)
     return MemoVersionOut(
         id=version.id,
         memo_id=version.memo_id,
@@ -67,11 +111,15 @@ def _version_out(version: MemoVersion, assumptions: list[Assumption]) -> MemoVer
         status=version.status.value,
         content=version.content,
         confidence_grade=version.confidence_grade,
+        submitted_at=version.submitted_at,
         approved_at=version.approved_at,
         approved_by_user_id=version.approved_by_user_id,
         created_by_user_id=version.created_by_user_id,
         created_at=version.created_at,
         assumptions=[AssumptionOut.model_validate(a) for a in assumptions],
+        reviews=[ReviewOut.model_validate(r) for r in reviews],
+        inputs_changed=bool(stale_reasons),
+        stale_reasons=stale_reasons,
     )
 
 
@@ -86,7 +134,8 @@ def _memo_out(session: Session, memo: Memo) -> MemoOut:
         title=memo.title,
         created_by_user_id=memo.created_by_user_id,
         created_at=memo.created_at,
-        versions=[_version_out(v, _assumptions_for(session, v.id)) for v in versions],
+        used_in_ic=memo.used_in_ic,
+        versions=[_version_out(session, v) for v in versions],
     )
 
 
@@ -145,6 +194,33 @@ async def create_memo(
     return _memo_out(session, memo)
 
 
+@router.get(
+    "/workspaces/{workspace_id}/memos/review-queue", response_model=list[ReviewQueueEntryOut]
+)
+async def get_review_queue(
+    membership: Membership = Depends(require_role(*_ANY_ROLE)),
+    session: Session = Depends(get_workspace_db),
+) -> list[ReviewQueueEntryOut]:
+    """F7: Draft/In Review memos for this workspace, low-confidence and
+    ambiguous-heavy ones first. Registered ahead of GET /memos/{memo_id}
+    so "review-queue" is never mistaken for a memo id."""
+    queue = list_review_queue(session, membership.workspace_id)
+    return [
+        ReviewQueueEntryOut(
+            memo_id=entry.memo_id,
+            memo_title=entry.memo_title,
+            version_id=entry.version_id,
+            version_number=entry.version_number,
+            status=entry.status.value,
+            confidence_grade=entry.confidence_grade,
+            ambiguous_count=entry.ambiguous_count,
+            submitted_at=entry.submitted_at,
+            created_at=entry.created_at,
+        )
+        for entry in queue
+    ]
+
+
 @router.get("/workspaces/{workspace_id}/memos/{memo_id}", response_model=MemoOut)
 async def get_memo(
     memo_id: uuid.UUID,
@@ -166,6 +242,32 @@ async def list_memos(
         .order_by(Memo.created_at.desc())
     ).scalars()
     return [_memo_out(session, memo) for memo in memos]
+
+
+@router.patch("/workspaces/{workspace_id}/memos/{memo_id}/used-in-ic", response_model=MemoOut)
+async def set_memo_used_in_ic(
+    memo_id: uuid.UUID,
+    body: UsedInIcRequest,
+    current_user: User = Depends(get_current_user),
+    membership: Membership = Depends(require_role(*_ANALYST_ROLES)),
+    session: Session = Depends(get_workspace_db),
+) -> MemoOut:
+    """F10's used-in-IC board metric tag — a plain field on the mutable
+    Memo pointer, not any (possibly approved/immutable) version."""
+    memo = _get_memo_or_404(session, memo_id, membership.workspace_id)
+    memo.used_in_ic = body.used_in_ic
+    record_audit_event(
+        session,
+        tenant_id=membership.tenant_id,
+        workspace_id=membership.workspace_id,
+        actor_user_id=current_user.id,
+        action="memo.used_in_ic_tagged",
+        entity_type="memo",
+        entity_id=memo.id,
+        payload={"used_in_ic": body.used_in_ic},
+    )
+    session.commit()
+    return _memo_out(session, memo)
 
 
 @router.patch(
@@ -215,7 +317,7 @@ async def override_memo_assumption(
     session.commit()
 
     return AssumptionOverrideResponse(
-        version=_version_out(updated_version, _assumptions_for(session, updated_version.id)),
+        version=_version_out(session, updated_version),
         change_note=diff_note.change_note,
         changes=[
             ChangeOut(
@@ -257,7 +359,7 @@ async def submit_memo_version(
         entity_id=version.id,
     )
     session.commit()
-    return _version_out(version, _assumptions_for(session, version.id))
+    return _version_out(session, version)
 
 
 @router.post(
@@ -267,6 +369,7 @@ async def submit_memo_version(
 async def approve_memo_version(
     memo_id: uuid.UUID,
     version_id: uuid.UUID,
+    body: ApproveMemoRequest = ApproveMemoRequest(),
     current_user: User = Depends(get_current_user),
     membership: Membership = Depends(require_role(*_APPROVER_ROLES)),
     session: Session = Depends(get_workspace_db),
@@ -274,7 +377,12 @@ async def approve_memo_version(
     memo = _get_memo_or_404(session, memo_id, membership.workspace_id)
     version = _get_memo_version_or_404(session, memo, version_id)
     try:
-        approve_memo(session, memo_version=version, approved_by_user_id=current_user.id)
+        approve_memo(
+            session,
+            memo_version=version,
+            approved_by_user_id=current_user.id,
+            panel_firm=body.panel_firm,
+        )
     except MemoStateError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     record_audit_event(
@@ -287,7 +395,7 @@ async def approve_memo_version(
         entity_id=version.id,
     )
     session.commit()
-    return _version_out(version, _assumptions_for(session, version.id))
+    return _version_out(session, version)
 
 
 @router.post(
@@ -326,4 +434,115 @@ async def create_memo_new_version(
         payload={"superseded_version": base_version.version},
     )
     session.commit()
-    return _version_out(new_version, _assumptions_for(session, new_version.id))
+    return _version_out(session, new_version)
+
+
+def _get_current_obligation_or_404(session: Session, obligation_id: uuid.UUID) -> Obligation:
+    obligation = session.get(Obligation, obligation_id)
+    if obligation is None or obligation.valid_to is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Obligation not found")
+    return obligation
+
+
+@router.post(
+    "/workspaces/{workspace_id}/memos/{memo_id}/versions/{version_id}"
+    "/obligations/{obligation_id}/correct",
+    response_model=CorrectionOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def correct_memo_obligation(
+    memo_id: uuid.UUID,
+    version_id: uuid.UUID,
+    obligation_id: uuid.UUID,
+    body: ObligationCorrectionRequest,
+    current_user: User = Depends(get_current_user),
+    membership: Membership = Depends(require_role(*_APPROVER_ROLES)),
+    session: Session = Depends(get_workspace_db),
+) -> CorrectionOut:
+    """F7: a reviewer's fix persists back to the instrument/template layer
+    as a new obligation version (services/instrument_onboarding.py's
+    correct_obligation), not just into this one memo — the next memo
+    built against this obligation gets the fix too. Gated by the same
+    workspace review role as approving a memo (require_staff is
+    deliberately reserved for /admin's onboarding workbench — see
+    test_route_admin_gating.py — not layered onto tenant-facing routes)."""
+    memo = _get_memo_or_404(session, memo_id, membership.workspace_id)
+    version = _get_memo_version_or_404(session, memo, version_id)
+    obligation = _get_current_obligation_or_404(session, obligation_id)
+
+    _corrected, correction = record_obligation_correction(
+        session,
+        memo_version=version,
+        obligation=obligation,
+        summary=body.summary,
+        obligation_type=body.obligation_type,
+        fields=body.fields,
+        confidence=body.confidence,
+        corrected_by_user_id=current_user.id,
+        note=body.note,
+    )
+    record_audit_event(
+        session,
+        tenant_id=membership.tenant_id,
+        workspace_id=membership.workspace_id,
+        actor_user_id=current_user.id,
+        action="obligation.corrected_via_review",
+        entity_type="obligation",
+        entity_id=_corrected.id,
+        payload={
+            "memo_version_id": str(version.id),
+            "superseded_obligation_id": str(obligation.id),
+        },
+    )
+    session.commit()
+    return CorrectionOut.model_validate(correction)
+
+
+@router.post(
+    "/workspaces/{workspace_id}/memos/{memo_id}/versions/{version_id}"
+    "/obligations/{obligation_id}/cost-template/correct",
+    response_model=CorrectionOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def correct_memo_cost_template(
+    memo_id: uuid.UUID,
+    version_id: uuid.UUID,
+    obligation_id: uuid.UUID,
+    body: CostTemplateCorrectionRequest,
+    current_user: User = Depends(get_current_user),
+    membership: Membership = Depends(require_role(*_APPROVER_ROLES)),
+    session: Session = Depends(get_workspace_db),
+) -> CorrectionOut:
+    """As correct_memo_obligation, for a reviewer's fix to a cost
+    template — attach_cost_template already always versions."""
+    memo = _get_memo_or_404(session, memo_id, membership.workspace_id)
+    version = _get_memo_version_or_404(session, memo, version_id)
+    obligation = _get_current_obligation_or_404(session, obligation_id)
+
+    _corrected, correction = record_cost_template_correction(
+        session,
+        memo_version=version,
+        obligation=obligation,
+        name=body.name,
+        drivers=body.drivers,
+        formula=body.formula,
+        currency=body.currency,
+        source_basis=body.source_basis,
+        maturity_tier=body.maturity_tier,
+        corrected_by_user_id=current_user.id,
+        note=body.note,
+        first_obligation_date=body.first_obligation_date,
+        transition_months=body.transition_months,
+    )
+    record_audit_event(
+        session,
+        tenant_id=membership.tenant_id,
+        workspace_id=membership.workspace_id,
+        actor_user_id=current_user.id,
+        action="cost_template.corrected_via_review",
+        entity_type="cost_template",
+        entity_id=_corrected.id,
+        payload={"memo_version_id": str(version.id), "obligation_id": str(obligation.id)},
+    )
+    session.commit()
+    return CorrectionOut.model_validate(correction)

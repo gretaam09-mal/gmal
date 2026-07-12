@@ -41,3 +41,22 @@ export async function apiFetch<T>(
   }
   return response.json() as Promise<T>;
 }
+
+/**
+ * Like apiFetch, but for binary responses (F8's PDF/DOCX exports) — a
+ * plain <a href> can't attach the Authorization header, so the caller
+ * fetches the blob here and turns it into an object URL to download.
+ */
+export async function apiFetchBlob(
+  path: string,
+  options: { getToken: () => Promise<string | null> },
+): Promise<Blob> {
+  const token = await options.getToken();
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, response.statusText);
+  }
+  return response.blob();
+}
