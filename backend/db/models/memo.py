@@ -33,13 +33,15 @@ class Memo(Base, PrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
 
 
 class MemoVersion(Base, PrimaryKeyMixin, TenantScopedMixin, CreatedAtMixin):
-    """An immutable snapshot of a memo's content.
+    """A snapshot of a memo's content, mutable only while DRAFT/IN_REVIEW.
 
-    CONVENTIONS.md rule #2: once created, never updated — a DB trigger
-    (see migration) rejects UPDATE/DELETE as a backstop. Approving a memo
-    updates `status`/`approved_*` via a narrow allowed transition, not by
-    editing content; see services/composition for the approval flow once
-    it exists.
+    CONVENTIONS.md rule #2: once `status` is APPROVED, the row is locked —
+    a DB trigger (see migration) rejects any further UPDATE/DELETE. Before
+    approval, `content`/`status` may be edited in place by the override
+    workflow (services/memo.py) so a Draft can be recomputed without
+    minting a new version each time; approving is the one transition that
+    seals it, and any change after that creates a new MemoVersion with a
+    change note (see services/memo.py, P-DIFF-NOTE).
     """
 
     __tablename__ = "memo_versions"
@@ -62,12 +64,23 @@ class MemoVersion(Base, PrimaryKeyMixin, TenantScopedMixin, CreatedAtMixin):
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
+    confidence_grade: Mapped[str | None] = mapped_column(String(1), nullable=True)
+    """A-D, from engine/confidence's published rubric (profile
+    completeness, template maturity, extraction confidence, scenario-source
+    quality) — computed, never chosen by the composition prompt."""
 
     memo: Mapped["Memo"] = relationship(back_populates="versions")
 
 
 class Assumption(Base, PrimaryKeyMixin, TenantScopedMixin, CreatedAtMixin):
-    """A named assumption pinned to a specific memo version."""
+    """A named assumption pinned to a specific memo version.
+
+    Every default/estimate/override/probability shown in the memo's
+    assumption register is one of these — `source` names where it came
+    from (e.g. "cost_template:<id>", "scenario_base_rate:<key>",
+    "analyst_override:<user_id>", "profile_field:<key>") so the register
+    can label each entry's provenance per F6's requirements.
+    """
 
     __tablename__ = "assumptions"
 
@@ -79,6 +92,7 @@ class Assumption(Base, PrimaryKeyMixin, TenantScopedMixin, CreatedAtMixin):
     )
     key: Mapped[str] = mapped_column(String, nullable=False)
     value: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    source: Mapped[str] = mapped_column(String, nullable=False, default="unknown")
     note: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
