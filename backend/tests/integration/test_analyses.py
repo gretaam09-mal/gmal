@@ -1,5 +1,7 @@
 import uuid
+from decimal import Decimal
 
+from db.session import set_rls_context
 from services.extraction import ExtractedObligation, FixtureExtractionProvider
 from services.instrument_onboarding import (
     approve_obligation,
@@ -10,6 +12,7 @@ from services.instrument_onboarding import (
     ingest_instrument,
     list_clauses,
 )
+from services.scenarios import ScenarioInput, record_scenario_probabilities
 
 _RAW_TEXT = (
     "1. A firm that processes personal data at scale must appoint a data protection officer."
@@ -36,19 +39,22 @@ def _set_profile_field(client, workspace_id, key, value, source="user"):
     return resp.json()
 
 
-def _approved_predicate_bound_to_new_obligation(db_session, make_user, *, expression):
+def _approved_predicate_bound_to_new_obligation(
+    db_session, make_user, *, expression, in_flight=False, title="Test Data Protection Act"
+):
     """Seeds one fully-approved obligation+predicate pair via the service
     layer (not HTTP — this is reference-data setup, not the thing under
     test) and returns (obligation, predicate)."""
     version = ingest_instrument(
         db_session,
-        title="Test Data Protection Act",
+        title=title,
         jurisdiction="UK",
         kind="Act",
         citation=None,
         version_label="v1",
         source_url=None,
         raw_text=_RAW_TEXT,
+        in_flight=in_flight,
     )
     clause = list_clauses(db_session, version.id)[0]
     extracted = ExtractedObligation.model_validate(
@@ -194,6 +200,106 @@ def test_analysis_quantifies_impact_when_bound_and_cost_template_exists(
     assert item["outcome"] == "binds"
     assert item["amount"] == 5000 + 40 * 500
     assert item["impact_band"] == "£10k–£50k"
+
+
+def test_analysis_computes_range_phasing_and_present_value(client_as, make_user, db_session):
+    owner = make_user()
+    client = client_as(owner)
+    workspace = _create_tenant_and_workspace(client)
+    _set_profile_field(client, workspace["id"], "footprint.processes_personal_data", True)
+    _set_profile_field(client, workspace["id"], "scale.employee_count", 500)
+
+    obligation, predicate = _approved_predicate_bound_to_new_obligation(
+        db_session,
+        make_user,
+        expression={"field": "footprint.processes_personal_data", "equals": True},
+    )
+    attach_cost_template(
+        db_session,
+        obligation=obligation,
+        name="DPO cost",
+        drivers=[{"key": "scale.employee_count", "label": "Employee count"}],
+        formula={"base": 5000, "terms": [{"driver": "scale.employee_count", "rate": 40}]},
+        currency="GBP",
+        source_basis="expert estimate",
+        maturity_tier="rough",
+        first_obligation_date="2027-01-01",
+        transition_months=2,
+    )
+    db_session.commit()
+
+    resp = client.post(
+        f"/workspaces/{workspace['id']}/analyses", json={"discount_rate_pct": 12}
+    )
+    assert resp.status_code == 201, resp.text
+    item = next(i for i in resp.json()["items"] if i["predicate_id"] == str(predicate.id))
+    amount = item["amount"]
+    assert amount == 5000 + 40 * 500
+
+    assert item["impact_low"] == round(amount * 0.8, 2)
+    assert item["impact_high"] == round(amount * 1.3, 2)
+
+    schedule = item["phased_schedule"]
+    assert [entry["period"] for entry in schedule] == ["2027-01", "2027-02", "2027-03"]
+    assert round(sum(entry["amount"] for entry in schedule), 2) == round(amount, 2)
+
+    assert item["present_value"] is not None
+    assert item["present_value"] < amount  # a positive discount rate always discounts
+
+
+def test_analysis_weights_in_flight_instrument_scenarios(client_as, make_user, db_session):
+    owner = make_user()
+    client = client_as(owner)
+    workspace = _create_tenant_and_workspace(client)
+    _set_profile_field(client, workspace["id"], "footprint.processes_personal_data", True)
+    _set_profile_field(client, workspace["id"], "scale.employee_count", 500)
+
+    obligation, predicate = _approved_predicate_bound_to_new_obligation(
+        db_session,
+        make_user,
+        expression={"field": "footprint.processes_personal_data", "equals": True},
+        in_flight=True,
+        title="In-Flight Draft Bill",
+    )
+    attach_cost_template(
+        db_session,
+        obligation=obligation,
+        name="DPO cost",
+        drivers=[{"key": "scale.employee_count", "label": "Employee count"}],
+        formula={"base": 5000, "terms": [{"driver": "scale.employee_count", "rate": 40}]},
+        currency="GBP",
+        source_basis="expert estimate",
+        maturity_tier="rough",
+    )
+    set_rls_context(db_session, workspace["tenant_id"], workspace["id"])
+    record_scenario_probabilities(
+        db_session,
+        tenant_id=uuid.UUID(workspace["tenant_id"]),
+        workspace_id=uuid.UUID(workspace["id"]),
+        predicate_id=predicate.id,
+        inputs=[
+            ScenarioInput(
+                scenario="as_drafted",
+                probability=Decimal("0.5"),
+                magnitude_multiplier=Decimal("1.0"),
+                source="expert_override",
+            ),
+            ScenarioInput(
+                scenario="amended",
+                probability=Decimal("0.5"),
+                magnitude_multiplier=Decimal("2.0"),
+                source="expert_override",
+            ),
+        ],
+    )
+    db_session.commit()
+
+    resp = client.post(f"/workspaces/{workspace['id']}/analyses", json={})
+    assert resp.status_code == 201, resp.text
+    item = next(i for i in resp.json()["items"] if i["predicate_id"] == str(predicate.id))
+    point_amount = 5000 + 40 * 500
+    # weighted 50/50 between 1x and 2x the point amount -> 1.5x
+    assert item["amount"] == round(point_amount * 1.5, 2)
 
 
 def test_unapproved_predicate_never_reaches_an_analysis(client_as, make_user, db_session):

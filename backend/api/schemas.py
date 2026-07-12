@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from pydantic import BaseModel, EmailStr, Field
@@ -153,6 +153,7 @@ class InstrumentCreateRequest(BaseModel):
     version_label: str = Field(min_length=1, max_length=100)
     source_url: str | None = None
     raw_text: str = Field(min_length=1)
+    in_flight: bool = False
 
 
 class ClauseOut(BaseModel):
@@ -170,6 +171,7 @@ class InstrumentOut(BaseModel):
     jurisdiction: str
     kind: str
     citation: str | None
+    in_flight: bool
     recorded_at: datetime
 
     model_config = {"from_attributes": True}
@@ -262,6 +264,8 @@ class CostTemplateCreateRequest(BaseModel):
     currency: str = Field(default="GBP", max_length=10)
     source_basis: str = Field(min_length=1, max_length=200)
     maturity_tier: str = Field(min_length=1, max_length=50)
+    first_obligation_date: date | None = None
+    transition_months: int = Field(default=0, ge=0)
 
 
 class CostTemplateOut(BaseModel):
@@ -273,6 +277,8 @@ class CostTemplateOut(BaseModel):
     currency: str
     source_basis: str
     maturity_tier: str
+    first_obligation_date: date | None
+    transition_months: int
     valid_from: datetime
     valid_to: datetime | None
 
@@ -293,6 +299,14 @@ class OnboardingMetricOut(BaseModel):
 class AnalysisCreateRequest(BaseModel):
     entity_profile_id: uuid.UUID | None = None
     """Defaults to the workspace's current profile version if omitted."""
+    discount_rate_pct: float = 0
+    fx_rate: float = 1
+    base_currency: str = Field(default="GBP", max_length=10)
+
+
+class PhaseEntryOut(BaseModel):
+    period: str
+    amount: float
 
 
 class AnalysisItemOut(BaseModel):
@@ -305,6 +319,10 @@ class AnalysisItemOut(BaseModel):
     rationale: str
     clause_refs: tuple[str, ...]
     amount: float | None
+    impact_low: float | None
+    impact_high: float | None
+    present_value: float | None
+    phased_schedule: list[PhaseEntryOut]
     currency: str
     impact_band: str
     confidence: int
@@ -319,5 +337,8 @@ class AnalysisOut(BaseModel):
     workspace_id: uuid.UUID
     entity_profile_id: uuid.UUID
     status: str
+    discount_rate_pct: float
+    fx_rate: float
+    base_currency: str
     created_at: datetime
     items: list[AnalysisItemOut]

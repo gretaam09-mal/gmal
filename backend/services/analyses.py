@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any, NamedTuple
 
 from sqlalchemy import select
@@ -34,9 +35,19 @@ from db.models import (
     ProfileField,
 )
 from db.models.enums import AnalysisStatus, PredicateStatus
-from engine.impact import compute_impact, impact_band
+from engine.impact import (
+    BASE_RATE_TABLES,
+    RangeResult,
+    ScenarioWeight,
+    compute_range,
+    compute_weighted_range,
+    discount_to_present_value,
+    impact_band,
+    phase_schedule,
+)
 from engine.predicates import PredicateOutcome, evaluate_predicate
 from engine.rationale import build_rationale
+from services.scenarios import get_latest_scenario_weights
 
 ENGINE_VERSION = "1"
 
@@ -76,6 +87,48 @@ def build_facts(session: Session, entity_profile_id: uuid.UUID) -> dict[str, Any
     return {f.field_key: f.field_value for f in fields}
 
 
+def _weighted_range_for_instrument(
+    session: Session,
+    *,
+    predicate_id: uuid.UUID,
+    instrument: Instrument,
+    point_range: RangeResult,
+) -> RangeResult:
+    """A settled instrument uses the point range as-is (a single
+    as-drafted scenario at probability 1.0). An in-flight one is weighted
+    across whatever scenario probabilities an expert has recorded (see
+    services/scenarios.py) — falling back to the published default
+    base-rate split, applied to the *same* range, when nothing has been
+    recorded yet."""
+    if not instrument.in_flight:
+        return point_range
+    recorded = get_latest_scenario_weights(session, predicate_id)
+    if recorded:
+        weights = tuple(
+            ScenarioWeight(
+                scenario=name,
+                probability=record.probability,
+                range=_scale_range(point_range, record.magnitude_multiplier),
+            )
+            for name, record in recorded.items()
+        )
+    else:
+        weights = tuple(
+            ScenarioWeight(scenario=name, probability=probability, range=point_range)
+            for name, probability in BASE_RATE_TABLES["default"].items()
+        )
+    return compute_weighted_range(weights)
+
+
+def _scale_range(range_result: RangeResult, multiplier: Decimal) -> RangeResult:
+    return RangeResult(
+        best=range_result.best * multiplier,
+        likely=range_result.likely * multiplier,
+        worst=range_result.worst * multiplier,
+        currency=range_result.currency,
+    )
+
+
 def run_analysis(
     session: Session,
     *,
@@ -83,12 +136,20 @@ def run_analysis(
     workspace_id: uuid.UUID,
     entity_profile_id: uuid.UUID,
     created_by_user_id: uuid.UUID,
+    discount_rate_pct: Decimal = Decimal("0"),
+    fx_rate: Decimal = Decimal("1"),
+    base_currency: str = "GBP",
 ) -> Analysis:
     """Evaluates every APPROVED predicate against one profile version and
     persists one AnalysisItem per predicate. See F4's 60-second success
     criterion — this loop is pure-function calls over data already in
     memory, no I/O per predicate, so it stays well inside that bound even
     for a large predicate set (see tests/unit/test_analyses_performance.py).
+
+    discount_rate_pct/fx_rate/base_currency are declared, not fetched —
+    see engine/impact/present_value.py — and are recorded on the Analysis
+    so a later memo can show exactly what produced its present-value
+    figures.
     """
     analysis = Analysis(
         tenant_id=tenant_id,
@@ -96,6 +157,9 @@ def run_analysis(
         entity_profile_id=entity_profile_id,
         status=AnalysisStatus.RUNNING,
         created_by_user_id=created_by_user_id,
+        discount_rate_pct=discount_rate_pct,
+        fx_rate=fx_rate,
+        base_currency=base_currency,
     )
     session.add(analysis)
     session.flush()
@@ -104,7 +168,7 @@ def run_analysis(
     contexts = _approved_predicate_contexts(session)
     now = datetime.now(UTC)
 
-    for predicate, obligation, _clause, _instrument in contexts:
+    for predicate, obligation, _clause, instrument in contexts:
         evaluation = evaluate_predicate(predicate.expression, facts)
         clause_refs = tuple(
             sorted({field["clause_ref"] for field in obligation.fields.values()})
@@ -118,6 +182,10 @@ def run_analysis(
         )
 
         amount = None
+        impact_low = None
+        impact_high = None
+        present_value = None
+        phased_schedule: list[dict[str, str]] = []
         currency = "GBP"
         if evaluation.outcome is PredicateOutcome.BINDS:
             cost_template = session.execute(
@@ -126,11 +194,34 @@ def run_analysis(
                 )
             ).scalar_one_or_none()
             if cost_template is not None:
-                impact = compute_impact(
+                point_range = compute_range(
                     cost_template.formula, facts, currency=cost_template.currency
                 )
-                amount = impact.amount
-                currency = impact.currency
+                currency = point_range.currency
+                if point_range.likely is not None:
+                    final_range = _weighted_range_for_instrument(
+                        session,
+                        predicate_id=predicate.id,
+                        instrument=instrument,
+                        point_range=point_range,
+                    )
+                    amount = final_range.likely
+                    impact_low = final_range.best
+                    impact_high = final_range.worst
+                    entries = phase_schedule(
+                        amount,
+                        first_obligation_date=cost_template.first_obligation_date,
+                        transition_months=cost_template.transition_months,
+                        analysis_date=now.date(),
+                    )
+                    phased_schedule = [
+                        {"period": entry.period, "amount": str(entry.amount)} for entry in entries
+                    ]
+                    present_value = discount_to_present_value(
+                        [entry.amount for entry in entries],
+                        discount_rate_pct=discount_rate_pct,
+                        fx_rate=fx_rate,
+                    )
 
         session.add(
             AnalysisItem(
@@ -142,6 +233,10 @@ def run_analysis(
                 missing_field_keys=list(evaluation.missing_field_keys),
                 rationale=rationale,
                 amount=amount,
+                impact_low=impact_low,
+                impact_high=impact_high,
+                present_value=present_value,
+                phased_schedule=phased_schedule,
                 currency=currency,
                 engine_version=ENGINE_VERSION,
                 computed_at=now,

@@ -23,7 +23,7 @@ see the instrument_onboarding_immutability migration):
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -60,10 +60,16 @@ def ingest_instrument(
     version_label: str,
     source_url: str | None,
     raw_text: str,
+    in_flight: bool = False,
 ) -> InstrumentVersion:
     now = datetime.now(UTC)
     instrument = Instrument(
-        title=title, jurisdiction=jurisdiction, kind=kind, citation=citation, valid_from=now
+        title=title,
+        jurisdiction=jurisdiction,
+        kind=kind,
+        citation=citation,
+        in_flight=in_flight,
+        valid_from=now,
     )
     session.add(instrument)
     session.flush()
@@ -297,6 +303,8 @@ def attach_cost_template(
     currency: str,
     source_basis: str,
     maturity_tier: str,
+    first_obligation_date: date | None = None,
+    transition_months: int = 0,
 ) -> CostTemplate:
     now = datetime.now(UTC)
     current = session.execute(
@@ -316,6 +324,8 @@ def attach_cost_template(
         currency=currency,
         source_basis=source_basis,
         maturity_tier=maturity_tier,
+        first_obligation_date=first_obligation_date,
+        transition_months=transition_months,
         valid_from=now,
     )
     session.add(template)
