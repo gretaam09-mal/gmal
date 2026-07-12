@@ -18,20 +18,21 @@ reference a false positive.
 """
 from __future__ import annotations
 
-import re
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import TYPE_CHECKING
+
+from services.prose_numerals import extract_numerals, normalise_numeral
 
 if TYPE_CHECKING:
     from services.composition.context import MemoComposeContext
     from services.composition.schemas import ComposedMemoProse
 
-_NUMERAL_RE = re.compile(
-    r"[£$€]\s?-?\d[\d,]*(?:\.\d+)?%?"  # currency-prefixed, e.g. £25,000.00
-    r"|-?\d[\d,]*\.\d+%?"  # has a decimal point, e.g. 25000.00 or 12.5%
-    r"|-?\d{1,3}(?:,\d{3})+%?"  # thousands-grouped with no currency symbol
-    r"|-?\d+%"  # a bare percentage, e.g. 60%
-)
+__all__ = [
+    "NumeralTraceabilityError",
+    "assert_numerals_trace_to_engine_output",
+    "extract_numerals",
+    "validate_composed_memo",
+]
 
 
 class NumeralTraceabilityError(Exception):
@@ -39,21 +40,9 @@ class NumeralTraceabilityError(Exception):
     any of the allowed engine-produced values."""
 
 
-def extract_numerals(text: str) -> list[str]:
-    return _NUMERAL_RE.findall(text)
-
-
-def _normalise(token: str) -> Decimal | None:
-    cleaned = token.strip().rstrip("%").lstrip("£$€ ").replace(",", "")
-    try:
-        return Decimal(cleaned)
-    except InvalidOperation:
-        return None
-
-
 def assert_numerals_trace_to_engine_output(text: str, allowed_values: frozenset[Decimal]) -> None:
     for token in extract_numerals(text):
-        value = _normalise(token)
+        value = normalise_numeral(token)
         if value is None:
             continue
         if value not in allowed_values:
