@@ -53,11 +53,21 @@ class SourceDocument(Base, PrimaryKeyMixin, TenantScopedMixin):
     )
 
 
-class SweepRun(Base, PrimaryKeyMixin, TenantScopedMixin):
-    """A scheduled or triggered sweep across a tenant's workspaces."""
+class SweepRun(Base, PrimaryKeyMixin, CreatedAtMixin):
+    """A run of F9's daily source sweep.
+
+    Platform-wide like Instrument/InstrumentVersion (a sweep checks the
+    curated official sources shared by every tenant, not one tenant's
+    data), so — like MetricsEvent/ErrorRegisterEntry — this carries a
+    nullable tenant_id/workspace_id instead of TenantScopedMixin and
+    carries no RLS policy; see the sweep_runs_platform_wide migration.
+    """
 
     __tablename__ = "sweep_runs"
 
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=True, index=True
+    )
     workspace_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=True, index=True
     )
@@ -70,6 +80,29 @@ class SweepRun(Base, PrimaryKeyMixin, TenantScopedMixin):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     summary: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+
+class CuratedSource(Base, PrimaryKeyMixin, CreatedAtMixin):
+    """F9: a curated official source the daily sweep watches for changes
+    (FCA Handbook, PRA Rulebook, legislation.gov.uk, UK Parliament API).
+
+    Platform-wide reference data, like Instrument/InstrumentVersion —
+    not tenant data, so no TenantScopedMixin and no RLS policy.
+    `instrument_id` links a source to the Instrument its content feeds;
+    left null until a human maps a newly curated source to an instrument
+    via the onboarding workbench.
+    """
+
+    __tablename__ = "curated_sources"
+
+    key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    url: Mapped[str] = mapped_column(String, nullable=False)
+    instrument_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("instruments.id"), nullable=True
+    )
+    last_content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_swept_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class MetricsEvent(Base, PrimaryKeyMixin, CreatedAtMixin):

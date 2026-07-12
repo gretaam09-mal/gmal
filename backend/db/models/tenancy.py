@@ -98,17 +98,25 @@ class Membership(Base, PrimaryKeyMixin, TimestampMixin, TenantScopedMixin):
     )
 
 
-class AuditEvent(Base, PrimaryKeyMixin, CreatedAtMixin, TenantScopedMixin):
+class AuditEvent(Base, PrimaryKeyMixin, CreatedAtMixin):
     """Append-only record of every state change.
 
     CONVENTIONS.md rule #2: nothing here is ever updated or deleted by
     application code; a DB trigger (see migration) rejects UPDATE/DELETE
     as a backstop. workspace_id is nullable because some events are
-    tenant-level (e.g. tenant created) rather than tied to one workspace.
+    tenant-level (e.g. tenant created) rather than tied to one workspace;
+    tenant_id is nullable too, for the handful of events that predate any
+    tenant (F10: a user's first sign-in, before they've joined or created
+    one) — those rows fall outside every tenant-scoped RLS policy (see
+    the row_level_security migration), same as MetricsEvent/
+    ErrorRegisterEntry's platform-level rows.
     """
 
     __tablename__ = "audit_events"
 
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=True, index=True
+    )
     workspace_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=True, index=True
     )

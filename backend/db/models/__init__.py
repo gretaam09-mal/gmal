@@ -23,6 +23,7 @@ from db.models.memo import (
     ReviewCorrection,
 )
 from db.models.ops import (
+    CuratedSource,
     ErrorRegisterEntry,
     ForecastLogEntry,
     MetricsEvent,
@@ -50,6 +51,7 @@ __all__ = [
     "AuditEvent",
     "Clause",
     "CostTemplate",
+    "CuratedSource",
     "EntityProfile",
     "ErrorRegisterEntry",
     "ForecastLogEntry",

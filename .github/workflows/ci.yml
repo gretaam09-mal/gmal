@@ -43,6 +43,9 @@ jobs:
       - name: Install dependencies
         run: poetry install --no-root
 
+      - name: Install Playwright Chromium (PDF export)
+        run: poetry run playwright install --with-deps chromium
+
       - name: Create app role, test database, and pgvector extension
         run: |
           PGPASSWORD=postgres psql -h localhost -U postgres -c \

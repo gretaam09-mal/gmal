@@ -58,6 +58,13 @@ _EXEMPT = {
     ("POST", "/admin/obligations/{obligation_id}/cost-template"),
     ("GET", "/admin/obligations/{obligation_id}/cost-template"),
     ("GET", "/admin/metrics/onboarding"),
+    ("GET", "/admin/metrics/monthly-report"),
+    ("POST", "/admin/error-register"),
+    ("GET", "/admin/error-register"),
+    ("PATCH", "/admin/error-register/{entry_id}/root-cause"),
+    ("POST", "/admin/error-register/{entry_id}/affected-workspaces"),
+    ("POST", "/admin/error-register/{entry_id}/resolve"),
+    ("POST", "/admin/error-register/{entry_id}/disclose"),
 }
 
 

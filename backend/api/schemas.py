@@ -472,3 +472,59 @@ class CorrectionOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# --- F10: monthly metrics report ---------------------------------------------
+
+
+class MonthlyMetricsReportOut(BaseModel):
+    period_start: datetime
+    period_end: datetime
+    time_to_exposure_list_minutes_avg: float | None
+    time_to_approved_memo_minutes_avg: float | None
+    review_minutes_avg: float | None
+    onboarding_hours_avg: float | None
+    override_count: int
+    memos_approved_count: int
+    used_in_ic_count: int
+
+
+# --- F10: internal error register --------------------------------------------
+
+
+class ErrorEntryCreateRequest(BaseModel):
+    source: str = Field(min_length=1, max_length=200)
+    message: str = Field(min_length=1, max_length=2000)
+    context: dict | None = None
+    tenant_id: uuid.UUID | None = None
+    workspace_id: uuid.UUID | None = None
+
+
+class SetRootCauseRequest(BaseModel):
+    root_cause: str = Field(min_length=1, max_length=2000)
+
+
+class AddAffectedWorkspaceRequest(BaseModel):
+    workspace_id: uuid.UUID
+
+
+class SendDisclosureRequest(BaseModel):
+    disclosure_note: str = Field(min_length=1, max_length=4000)
+    affected_tenant_ids_by_workspace: dict[str, uuid.UUID]
+
+
+class ErrorEntryOut(BaseModel):
+    id: uuid.UUID
+    tenant_id: uuid.UUID | None
+    workspace_id: uuid.UUID | None
+    source: str
+    message: str
+    context: dict | None
+    resolved_at: datetime | None
+    root_cause: str | None
+    affected_workspace_ids: list[str]
+    disclosure_note: str | None
+    disclosure_sent_at: datetime | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

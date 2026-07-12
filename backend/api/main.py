@@ -3,8 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.config import get_settings
 from api.routes import (
+    admin_error_register,
     admin_instruments,
+    admin_metrics,
     analyses,
+    exports,
     health,
     invites,
     me,
@@ -37,4 +40,7 @@ app.include_router(invites.router)
 app.include_router(profiles.router)
 app.include_router(analyses.router)
 app.include_router(memos.router)
+app.include_router(exports.router)
 app.include_router(admin_instruments.router)
+app.include_router(admin_metrics.router)
+app.include_router(admin_error_register.router)
