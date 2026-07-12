@@ -89,7 +89,13 @@ class MetricsEvent(Base, PrimaryKeyMixin, CreatedAtMixin):
 
 
 class ErrorRegisterEntry(Base, PrimaryKeyMixin, CreatedAtMixin):
-    """An operational error worth tracking to resolution."""
+    """An operational error worth tracking to resolution.
+
+    F10: this is specifically for *post-approval* errors — something
+    that turned out to be wrong in a memo a client already received —
+    so root_cause/affected_workspace_ids/disclosure_* exist to support
+    the disclosure obligation that follows, not just internal triage.
+    """
 
     __tablename__ = "error_register"
 
@@ -103,6 +109,16 @@ class ErrorRegisterEntry(Base, PrimaryKeyMixin, CreatedAtMixin):
     message: Mapped[str] = mapped_column(String, nullable=False)
     context: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    root_cause: Mapped[str | None] = mapped_column(String, nullable=True)
+    affected_workspace_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    """Every workspace (client) this error is known to have reached —
+    deliberately a JSONB list of ids rather than a join table, since this
+    register logs a small, staff-curated volume of incidents, not a
+    high-cardinality relation."""
+    disclosure_note: Mapped[str | None] = mapped_column(String, nullable=True)
+    disclosure_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class Report(Base, PrimaryKeyMixin, TenantScopedMixin, CreatedAtMixin):
