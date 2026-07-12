@@ -64,7 +64,7 @@ export function WorkspaceDashboard() {
       <div className="grid grid-cols-[240px_1fr] gap-6">
         <aside className="flex flex-col gap-4">
           <h2 className="font-ui text-sm font-medium uppercase tracking-wide text-ink/50">
-            Workspaces
+            Assessments
           </h2>
           <ul className="flex flex-col gap-1">
             {workspaces.map((workspace) => (
@@ -89,10 +89,12 @@ export function WorkspaceDashboard() {
             <div className="flex flex-col gap-6">
               <div>
                 <h2 className="font-ui text-xl font-semibold text-ink">
-                  {selectedWorkspace.real_name ?? selectedWorkspace.codename}
+                  {selectedWorkspace.codename}
                 </h2>
                 {selectedWorkspace.real_name ? (
-                  <p className="font-ui text-sm text-ink/50">codename: {selectedWorkspace.codename}</p>
+                  <p className="font-ui text-sm text-ink/50">
+                    Subject company: {selectedWorkspace.real_name}
+                  </p>
                 ) : null}
               </div>
 
@@ -131,7 +133,7 @@ export function WorkspaceDashboard() {
               )}
             </div>
           ) : (
-            <p className="font-ui text-sm text-ink/60">Select or create a workspace to get started.</p>
+            <p className="font-ui text-sm text-ink/60">Select or create an assessment to get started.</p>
           )}
         </main>
       </div>
@@ -144,7 +146,7 @@ function CreateTenantForm({ onCreate }: { onCreate: (name: string, slug: string)
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-8">
-      <h1 className="font-ui text-xl font-semibold text-ink">Set up your fund</h1>
+      <h1 className="font-ui text-xl font-semibold text-ink">Set up your organisation</h1>
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -152,18 +154,18 @@ function CreateTenantForm({ onCreate }: { onCreate: (name: string, slug: string)
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, "-")
             .replace(/^-+|-+$/g, "");
-          onCreate(name, slug || `fund-${Date.now()}`);
+          onCreate(name, slug || `organisation-${Date.now()}`);
         }}
         className="flex flex-col gap-2"
       >
         <input
           required
-          placeholder="Fund name"
+          placeholder="Organisation name"
           value={name}
           onChange={(event) => setName(event.target.value)}
           className="rounded border border-ink/20 bg-paper px-3 py-2 font-ui text-sm"
         />
-        <Button type="submit">Create fund</Button>
+        <Button type="submit">Create organisation</Button>
       </form>
     </div>
   );
@@ -187,16 +189,16 @@ function CreateWorkspaceForm({
       }}
       className="flex flex-col gap-2 rounded-md border border-ink/10 p-3"
     >
-      <h3 className="font-ui text-sm font-medium text-ink">New workspace</h3>
+      <h3 className="font-ui text-sm font-medium text-ink">New assessment</h3>
       <input
         required
-        placeholder="Codename (e.g. project-falcon)"
+        placeholder="Assessment name"
         value={codename}
         onChange={(event) => setCodename(event.target.value)}
         className="rounded border border-ink/20 bg-paper px-2 py-1 font-ui text-sm"
       />
       <input
-        placeholder="Real target name (optional)"
+        placeholder="Subject company (optional)"
         value={realName}
         onChange={(event) => setRealName(event.target.value)}
         className="rounded border border-ink/20 bg-paper px-2 py-1 font-ui text-sm"

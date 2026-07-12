@@ -94,7 +94,7 @@ def get_workspace_membership(
         )
     ).scalar_one_or_none()
     if membership is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Workspace not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Assessment not found")
     return membership
 
 

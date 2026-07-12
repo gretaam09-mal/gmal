@@ -100,7 +100,7 @@ export function MembersPanel({ workspace, getToken }: { workspace: Workspace; ge
             <input
               type="email"
               required
-              placeholder="name@fund.com"
+              placeholder="name@organisation.com"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               className="flex-1 rounded border border-ink/20 bg-paper px-2 py-1 font-ui text-sm"

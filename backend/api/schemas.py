@@ -8,10 +8,10 @@ from db.models.enums import MembershipStatus, ProfileFieldSource, Role
 from engine.completeness.catalog import Section
 
 ROLE_DESCRIPTIONS: dict[Role, str] = {
-    Role.OWNER: "Full control: manage members, settings, and all workspace content.",
+    Role.OWNER: "Full control: manage members, settings, and all assessment content.",
     Role.ANALYST: "Build and edit entity profiles, analyses, and memo drafts.",
     Role.APPROVER: "Review and approve memos before they go out, alongside analyst work.",
-    Role.VIEWER: "Read-only access to the workspace's profiles, analyses, and memos.",
+    Role.VIEWER: "Read-only access to the assessment's profiles, analyses, and memos.",
 }
 
 
@@ -298,7 +298,7 @@ class OnboardingMetricOut(BaseModel):
 
 class AnalysisCreateRequest(BaseModel):
     entity_profile_id: uuid.UUID | None = None
-    """Defaults to the workspace's current profile version if omitted."""
+    """Defaults to the assessment's current profile version if omitted."""
     discount_rate_pct: float = 0
     fx_rate: float = 1
     base_currency: str = Field(default="GBP", max_length=10)
