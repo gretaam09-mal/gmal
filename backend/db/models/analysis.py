@@ -80,7 +80,9 @@ class AnalysisItem(Base, PrimaryKeyMixin, TenantScopedMixin):
     impact_low: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
     impact_high: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
     present_value: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
-    phased_schedule: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
+    phased_schedule: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
     currency: Mapped[str] = mapped_column(String, nullable=False, default="GBP")
     engine_version: Mapped[str] = mapped_column(String, nullable=False)
     computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
