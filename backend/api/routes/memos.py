@@ -22,10 +22,13 @@ from api.schemas import (
     AssumptionOverrideRequest,
     AssumptionOverrideResponse,
     ChangeOut,
+    CorrectionOut,
+    CostTemplateCorrectionRequest,
     MemoCreateRequest,
     MemoOut,
     MemoVersionOut,
     NewVersionRequest,
+    ObligationCorrectionRequest,
     ReviewOut,
     ReviewQueueEntryOut,
     UsedInIcRequest,
@@ -37,6 +40,7 @@ from db.models import (
     Memo,
     MemoInputChangeFlag,
     MemoVersion,
+    Obligation,
     Review,
     Role,
     User,
@@ -53,7 +57,11 @@ from services.memo import (
     override_assumption_and_recompute,
     submit_for_review,
 )
-from services.review import list_review_queue
+from services.review import (
+    list_review_queue,
+    record_cost_template_correction,
+    record_obligation_correction,
+)
 
 router = APIRouter(tags=["memos"])
 
@@ -427,3 +435,114 @@ async def create_memo_new_version(
     )
     session.commit()
     return _version_out(session, new_version)
+
+
+def _get_current_obligation_or_404(session: Session, obligation_id: uuid.UUID) -> Obligation:
+    obligation = session.get(Obligation, obligation_id)
+    if obligation is None or obligation.valid_to is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Obligation not found")
+    return obligation
+
+
+@router.post(
+    "/workspaces/{workspace_id}/memos/{memo_id}/versions/{version_id}"
+    "/obligations/{obligation_id}/correct",
+    response_model=CorrectionOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def correct_memo_obligation(
+    memo_id: uuid.UUID,
+    version_id: uuid.UUID,
+    obligation_id: uuid.UUID,
+    body: ObligationCorrectionRequest,
+    current_user: User = Depends(get_current_user),
+    membership: Membership = Depends(require_role(*_APPROVER_ROLES)),
+    session: Session = Depends(get_workspace_db),
+) -> CorrectionOut:
+    """F7: a reviewer's fix persists back to the instrument/template layer
+    as a new obligation version (services/instrument_onboarding.py's
+    correct_obligation), not just into this one memo — the next memo
+    built against this obligation gets the fix too. Gated by the same
+    workspace review role as approving a memo (require_staff is
+    deliberately reserved for /admin's onboarding workbench — see
+    test_route_admin_gating.py — not layered onto tenant-facing routes)."""
+    memo = _get_memo_or_404(session, memo_id, membership.workspace_id)
+    version = _get_memo_version_or_404(session, memo, version_id)
+    obligation = _get_current_obligation_or_404(session, obligation_id)
+
+    _corrected, correction = record_obligation_correction(
+        session,
+        memo_version=version,
+        obligation=obligation,
+        summary=body.summary,
+        obligation_type=body.obligation_type,
+        fields=body.fields,
+        confidence=body.confidence,
+        corrected_by_user_id=current_user.id,
+        note=body.note,
+    )
+    record_audit_event(
+        session,
+        tenant_id=membership.tenant_id,
+        workspace_id=membership.workspace_id,
+        actor_user_id=current_user.id,
+        action="obligation.corrected_via_review",
+        entity_type="obligation",
+        entity_id=_corrected.id,
+        payload={
+            "memo_version_id": str(version.id),
+            "superseded_obligation_id": str(obligation.id),
+        },
+    )
+    session.commit()
+    return CorrectionOut.model_validate(correction)
+
+
+@router.post(
+    "/workspaces/{workspace_id}/memos/{memo_id}/versions/{version_id}"
+    "/obligations/{obligation_id}/cost-template/correct",
+    response_model=CorrectionOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def correct_memo_cost_template(
+    memo_id: uuid.UUID,
+    version_id: uuid.UUID,
+    obligation_id: uuid.UUID,
+    body: CostTemplateCorrectionRequest,
+    current_user: User = Depends(get_current_user),
+    membership: Membership = Depends(require_role(*_APPROVER_ROLES)),
+    session: Session = Depends(get_workspace_db),
+) -> CorrectionOut:
+    """As correct_memo_obligation, for a reviewer's fix to a cost
+    template — attach_cost_template already always versions."""
+    memo = _get_memo_or_404(session, memo_id, membership.workspace_id)
+    version = _get_memo_version_or_404(session, memo, version_id)
+    obligation = _get_current_obligation_or_404(session, obligation_id)
+
+    _corrected, correction = record_cost_template_correction(
+        session,
+        memo_version=version,
+        obligation=obligation,
+        name=body.name,
+        drivers=body.drivers,
+        formula=body.formula,
+        currency=body.currency,
+        source_basis=body.source_basis,
+        maturity_tier=body.maturity_tier,
+        corrected_by_user_id=current_user.id,
+        note=body.note,
+        first_obligation_date=body.first_obligation_date,
+        transition_months=body.transition_months,
+    )
+    record_audit_event(
+        session,
+        tenant_id=membership.tenant_id,
+        workspace_id=membership.workspace_id,
+        actor_user_id=current_user.id,
+        action="cost_template.corrected_via_review",
+        entity_type="cost_template",
+        entity_id=_corrected.id,
+        payload={"memo_version_id": str(version.id), "obligation_id": str(obligation.id)},
+    )
+    session.commit()
+    return CorrectionOut.model_validate(correction)

@@ -440,3 +440,35 @@ class AssumptionOverrideResponse(BaseModel):
 
 class NewVersionRequest(BaseModel):
     change_note: str = Field(min_length=1, max_length=1000)
+
+
+class ObligationCorrectionRequest(BaseModel):
+    summary: str = Field(min_length=1, max_length=500)
+    obligation_type: str = Field(min_length=1, max_length=100)
+    fields: dict[str, Any]
+    confidence: int = Field(ge=0, le=100)
+    note: str = Field(min_length=1, max_length=1000)
+
+
+class CostTemplateCorrectionRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    drivers: list[dict[str, Any]] = Field(default_factory=list)
+    formula: dict[str, Any]
+    currency: str = Field(default="GBP", max_length=10)
+    source_basis: str = Field(min_length=1, max_length=200)
+    maturity_tier: str = Field(min_length=1, max_length=50)
+    note: str = Field(min_length=1, max_length=1000)
+    first_obligation_date: date | None = None
+    transition_months: int = Field(default=0, ge=0)
+
+
+class CorrectionOut(BaseModel):
+    id: uuid.UUID
+    memo_version_id: uuid.UUID
+    obligation_id: uuid.UUID | None
+    cost_template_id: uuid.UUID | None
+    corrected_by_user_id: uuid.UUID
+    note: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
