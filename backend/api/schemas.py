@@ -359,6 +359,17 @@ class AssumptionOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ReviewOut(BaseModel):
+    id: uuid.UUID
+    reviewer_user_id: uuid.UUID
+    decision: str
+    comment: str | None
+    panel_firm: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class MemoVersionOut(BaseModel):
     id: uuid.UUID
     memo_id: uuid.UUID
@@ -366,11 +377,15 @@ class MemoVersionOut(BaseModel):
     status: str
     content: dict[str, Any]
     confidence_grade: str | None
+    submitted_at: datetime | None
     approved_at: datetime | None
     approved_by_user_id: uuid.UUID | None
     created_by_user_id: uuid.UUID
     created_at: datetime
     assumptions: list[AssumptionOut]
+    reviews: list[ReviewOut]
+    inputs_changed: bool
+    stale_reasons: list[str]
 
 
 class MemoOut(BaseModel):
@@ -380,7 +395,28 @@ class MemoOut(BaseModel):
     title: str
     created_by_user_id: uuid.UUID
     created_at: datetime
+    used_in_ic: bool
     versions: list[MemoVersionOut]
+
+
+class ReviewQueueEntryOut(BaseModel):
+    memo_id: uuid.UUID
+    memo_title: str
+    version_id: uuid.UUID
+    version_number: int
+    status: str
+    confidence_grade: str | None
+    ambiguous_count: int
+    submitted_at: datetime | None
+    created_at: datetime
+
+
+class ApproveMemoRequest(BaseModel):
+    panel_firm: str | None = None
+
+
+class UsedInIcRequest(BaseModel):
+    used_in_ic: bool
 
 
 class AssumptionOverrideRequest(BaseModel):

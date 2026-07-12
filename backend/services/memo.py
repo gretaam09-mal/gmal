@@ -61,6 +61,7 @@ from services.composition.schemas import ComposedMemoProse
 from services.diff_note.provider import DiffNoteProvider
 from services.diff_note.schemas import ComposedDiffNote
 from services.entity_profile import get_profile_fields
+from services.metrics import record_assumption_override, record_memo_approved, record_review_minutes
 from services.scenarios import get_latest_scenario_weights
 
 _MATURITY_RANK = {"rough": 0, "estimated": 1, "benchmarked": 2, "quoted": 3}
@@ -612,6 +613,13 @@ def override_assumption_and_recompute(
         new_snapshot[f"assumption:{assumption.key}"] = new_assumption_numeric
     changes = compute_assumption_diff(old_snapshot, new_snapshot)
     diff_note = diff_note_provider.summarise(changes)
+    record_assumption_override(
+        session,
+        tenant_id=memo_version.tenant_id,
+        workspace_id=memo_version.workspace_id,
+        memo_version_id=memo_version.id,
+        assumption_key=assumption.key,
+    )
     return memo_version, diff_note, changes
 
 
@@ -619,10 +627,15 @@ def submit_for_review(memo_version: MemoVersion) -> None:
     if memo_version.status != MemoStatus.DRAFT:
         raise MemoStateError(f"Cannot submit a memo version in status {memo_version.status.value}")
     memo_version.status = MemoStatus.IN_REVIEW
+    memo_version.submitted_at = datetime.now(UTC)
 
 
 def approve_memo(
-    session: Session, *, memo_version: MemoVersion, approved_by_user_id: uuid.UUID
+    session: Session,
+    *,
+    memo_version: MemoVersion,
+    approved_by_user_id: uuid.UUID,
+    panel_firm: str | None = None,
 ) -> None:
     if memo_version.status != MemoStatus.IN_REVIEW:
         raise MemoStateError(
@@ -638,9 +651,13 @@ def approve_memo(
             memo_version_id=memo_version.id,
             reviewer_user_id=approved_by_user_id,
             decision=ReviewDecision.APPROVED,
+            panel_firm=panel_firm,
         )
     )
     session.flush()
+    record_review_minutes(session, memo_version=memo_version, reviewer_user_id=approved_by_user_id)
+    memo = session.get(Memo, memo_version.memo_id)
+    record_memo_approved(session, memo_version=memo_version, memo_created_at=memo.created_at)
 
 
 def create_new_version_from_approved(
