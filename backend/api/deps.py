@@ -12,6 +12,8 @@ from services.auth.clerk import ClerkAuthError, verify_clerk_token
 from services.companies_house import CompaniesHouseClient
 
 if TYPE_CHECKING:
+    from services.composition.provider import CompositionProvider
+    from services.diff_note.provider import DiffNoteProvider
     from services.extraction.provider import ExtractionProvider
     from services.predicate_assist.provider import PredicateAssistProvider
 
@@ -125,6 +127,22 @@ def get_predicate_assist_provider() -> "PredicateAssistProvider":
     from services.predicate_assist import AnthropicPredicateAssistProvider
 
     return AnthropicPredicateAssistProvider()
+
+
+def get_composition_provider() -> "CompositionProvider":
+    """See get_extraction_provider — same fail-closed-without-a-key shape,
+    for P-COMPOSE (services/composition.py)."""
+    from services.composition import AnthropicCompositionProvider
+
+    return AnthropicCompositionProvider()
+
+
+def get_diff_note_provider() -> "DiffNoteProvider":
+    """See get_extraction_provider — same fail-closed-without-a-key shape,
+    for P-DIFF-NOTE (services/diff_note.py)."""
+    from services.diff_note import AnthropicDiffNoteProvider
+
+    return AnthropicDiffNoteProvider()
 
 
 def require_staff(current_user: User = Depends(get_current_user)) -> User:

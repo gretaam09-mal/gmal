@@ -117,6 +117,7 @@ async def create_instrument(
         version_label=body.version_label,
         source_url=body.source_url,
         raw_text=body.raw_text,
+        in_flight=body.in_flight,
     )
     session.commit()
     instrument = session.get(Instrument, version.instrument_id)
@@ -430,6 +431,8 @@ async def attach_obligation_cost_template(
         currency=body.currency,
         source_basis=body.source_basis,
         maturity_tier=body.maturity_tier,
+        first_obligation_date=body.first_obligation_date,
+        transition_months=body.transition_months,
     )
     session.commit()
     return template

@@ -96,3 +96,44 @@ def companies_house_fixture():
     app.dependency_overrides[get_companies_house_client] = _override
     yield
     app.dependency_overrides.pop(get_companies_house_client, None)
+
+
+@pytest.fixture
+def composition_provider_fixture():
+    """Overrides get_composition_provider with an explicitly-registered
+    FixtureCompositionProvider — no route test in this repo ever calls
+    the real P-COMPOSE model. Tests register the prose they expect
+    before hitting the HTTP endpoint."""
+    from api.deps import get_composition_provider
+    from services.composition.fixture_provider import FixtureCompositionProvider
+
+    provider = FixtureCompositionProvider()
+    app.dependency_overrides[get_composition_provider] = lambda: provider
+    yield provider
+    app.dependency_overrides.pop(get_composition_provider, None)
+
+
+@pytest.fixture
+def diff_note_provider_fixture():
+    """Overrides get_diff_note_provider with a deterministic stand-in that
+    mechanically renders a note from the Change tuple it's given (always
+    traceable, since it's built from the same before/after values) — good
+    enough for HTTP round-trip tests that only care that the endpoint
+    wires the diff through, not about prose quality."""
+    from api.deps import get_diff_note_provider
+    from services.diff_note.schemas import ComposedDiffNote
+    from services.diff_note.validator import validate_diff_note
+
+    class _AutoDiffNoteProvider:
+        def summarise(self, changes):
+            parts = [f"{c.field} changed from {c.before} to {c.after}." for c in changes]
+            note = ComposedDiffNote.model_validate(
+                {"change_note": " ".join(parts) or "No changes."}
+            )
+            validate_diff_note(note, changes)
+            return note
+
+    provider = _AutoDiffNoteProvider()
+    app.dependency_overrides[get_diff_note_provider] = lambda: provider
+    yield provider
+    app.dependency_overrides.pop(get_diff_note_provider, None)

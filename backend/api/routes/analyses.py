@@ -6,13 +6,14 @@ everywhere — see api/routes/profiles.py for the identical shape.
 """
 
 import uuid
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from api.deps import get_current_user, get_workspace_db, require_role
-from api.schemas import AnalysisCreateRequest, AnalysisItemOut, AnalysisOut
+from api.schemas import AnalysisCreateRequest, AnalysisItemOut, AnalysisOut, PhaseEntryOut
 from db.models import Analysis, Membership, Role, User
 from services.analyses import list_analysis_item_views, run_analysis
 from services.audit import record_audit_event
@@ -30,6 +31,9 @@ def _to_out(session: Session, analysis: Analysis) -> AnalysisOut:
         workspace_id=analysis.workspace_id,
         entity_profile_id=analysis.entity_profile_id,
         status=analysis.status.value,
+        discount_rate_pct=float(analysis.discount_rate_pct),
+        fx_rate=float(analysis.fx_rate),
+        base_currency=analysis.base_currency,
         created_at=analysis.created_at,
         items=[
             AnalysisItemOut(
@@ -42,6 +46,15 @@ def _to_out(session: Session, analysis: Analysis) -> AnalysisOut:
                 rationale=v.item.rationale,
                 clause_refs=v.clause_refs,
                 amount=float(v.item.amount) if v.item.amount is not None else None,
+                impact_low=float(v.item.impact_low) if v.item.impact_low is not None else None,
+                impact_high=float(v.item.impact_high) if v.item.impact_high is not None else None,
+                present_value=(
+                    float(v.item.present_value) if v.item.present_value is not None else None
+                ),
+                phased_schedule=[
+                    PhaseEntryOut(period=entry["period"], amount=float(entry["amount"]))
+                    for entry in v.item.phased_schedule
+                ],
                 currency=v.item.currency,
                 impact_band=v.impact_band,
                 confidence=v.obligation_confidence,
@@ -84,6 +97,9 @@ async def create_analysis(
         workspace_id=membership.workspace_id,
         entity_profile_id=entity_profile_id,
         created_by_user_id=current_user.id,
+        discount_rate_pct=Decimal(str(body.discount_rate_pct)),
+        fx_rate=Decimal(str(body.fx_rate)),
+        base_currency=body.base_currency,
     )
     record_audit_event(
         session,

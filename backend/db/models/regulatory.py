@@ -1,8 +1,8 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -31,6 +31,13 @@ class Instrument(Base, PrimaryKeyMixin, BitemporalMixin):
     jurisdiction: Mapped[str] = mapped_column(String, nullable=False, default="UK")
     kind: Mapped[str] = mapped_column(String, nullable=False)
     citation: Mapped[str | None] = mapped_column(String, nullable=True)
+    in_flight: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    """Still being drafted/consulted on rather than settled law — gates F5's
+    scenario outcome-weighting (services/scenarios.py): an in-flight
+    instrument's impact range is probability-weighted across as-drafted/
+    amended/delayed scenarios (see forecast_log entries with
+    forecast_type="scenario_probability"); a settled instrument always
+    uses a single as-drafted scenario at probability 1.0."""
 
 
 class InstrumentVersion(Base, PrimaryKeyMixin, BitemporalMixin):
@@ -148,7 +155,23 @@ class CostTemplate(Base, PrimaryKeyMixin, BitemporalMixin):
     )
     name: Mapped[str] = mapped_column(String, nullable=False)
     drivers: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
+    """Each entry may carry an optional "category" — one of the six named
+    driver categories F5 asks for (systems, staffing, external_advice,
+    reporting_effort, capital, restricted_revenue) — purely for grouping
+    in the memo's waterfall; engine/impact doesn't interpret it."""
     formula: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    """`{"base": N, "terms": [{"driver": key, "rate": r}, ...],
+    "range": {"low_multiplier": 0.8, "high_multiplier": 1.3}}` — `range`
+    is optional (see engine/impact/range.py's defaults) and is how a
+    single point formula also produces a best/worst spread."""
     currency: Mapped[str] = mapped_column(String, nullable=False, default="GBP")
     source_basis: Mapped[str] = mapped_column(String, nullable=False)
     maturity_tier: Mapped[str] = mapped_column(String, nullable=False)
+    first_obligation_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    """When the cost first applies — declared by the staff member
+    attaching the template (like a predicate, never inferred by P-EXTRACT
+    from clause text), so engine/impact can time-phase it. Null means
+    "immediate/ongoing from the moment the obligation binds"."""
+    transition_months: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    """How many months the cost phases in over, starting at
+    first_obligation_date — 0 means the full amount lands in one period."""
