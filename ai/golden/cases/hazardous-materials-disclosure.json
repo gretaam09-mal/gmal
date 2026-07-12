@@ -1,0 +1,26 @@
+{
+  "id": "hazardous-materials-disclosure",
+  "description": "A disclosure-type obligation with a numeric threshold expressed in the clause text itself, to pin that thresholds stay as extracted natural-language values (never parsed into a number here — that's engine/predicates's job at analysis time, not P-EXTRACT's, per CONVENTIONS.md rule 1).",
+  "input": {
+    "raw_model_output": {
+      "summary": "A site handling more than 1 tonne of hazardous waste annually must file an annual disclosure.",
+      "obligation_type": "disclosure",
+      "who": {"value": "sites handling hazardous waste", "clause_ref": "reg.12", "confidence": 87},
+      "what": {"value": "file an annual disclosure", "clause_ref": "reg.12", "confidence": 91},
+      "when": {"value": "annually", "clause_ref": "reg.12", "confidence": 84},
+      "threshold": {"value": "more than 1 tonne of hazardous waste per year", "clause_ref": "reg.12", "confidence": 89},
+      "enforcer": {"value": "the Environment Agency", "clause_ref": "reg.13", "confidence": 78},
+      "confidence": 85
+    }
+  },
+  "expected": {
+    "summary": "A site handling more than 1 tonne of hazardous waste annually must file an annual disclosure.",
+    "obligation_type": "disclosure",
+    "who": {"value": "sites handling hazardous waste", "clause_ref": "reg.12", "confidence": 87},
+    "what": {"value": "file an annual disclosure", "clause_ref": "reg.12", "confidence": 91},
+    "when": {"value": "annually", "clause_ref": "reg.12", "confidence": 84},
+    "threshold": {"value": "more than 1 tonne of hazardous waste per year", "clause_ref": "reg.12", "confidence": 89},
+    "enforcer": {"value": "the Environment Agency", "clause_ref": "reg.13", "confidence": 78},
+    "confidence": 85
+  }
+}

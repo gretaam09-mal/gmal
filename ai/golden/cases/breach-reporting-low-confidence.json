@@ -1,0 +1,26 @@
+{
+  "id": "breach-reporting-low-confidence",
+  "description": "A vaguer clause where several fields are genuinely low-confidence rather than 'not specified' — pins that the schema accepts (and doesn't silently round or reject) low but non-zero confidence scores.",
+  "input": {
+    "raw_model_output": {
+      "summary": "A firm must report a material breach within a reasonable time.",
+      "obligation_type": "reporting",
+      "who": {"value": "an authorised firm", "clause_ref": "s.9", "confidence": 65},
+      "what": {"value": "report a material breach", "clause_ref": "s.9", "confidence": 70},
+      "when": {"value": "within a reasonable time", "clause_ref": "s.9", "confidence": 15},
+      "threshold": {"value": "the breach is material", "clause_ref": "s.9", "confidence": 25},
+      "enforcer": {"value": "not specified in this clause", "clause_ref": "s.9", "confidence": 10},
+      "confidence": 40
+    }
+  },
+  "expected": {
+    "summary": "A firm must report a material breach within a reasonable time.",
+    "obligation_type": "reporting",
+    "who": {"value": "an authorised firm", "clause_ref": "s.9", "confidence": 65},
+    "what": {"value": "report a material breach", "clause_ref": "s.9", "confidence": 70},
+    "when": {"value": "within a reasonable time", "clause_ref": "s.9", "confidence": 15},
+    "threshold": {"value": "the breach is material", "clause_ref": "s.9", "confidence": 25},
+    "enforcer": {"value": "not specified in this clause", "clause_ref": "s.9", "confidence": 10},
+    "confidence": 40
+  }
+}

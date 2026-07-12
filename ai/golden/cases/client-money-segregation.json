@@ -1,0 +1,26 @@
+{
+  "id": "client-money-segregation",
+  "description": "A single clause citing itself for every field — the common case where one short clause states who/what/threshold/enforcer together and 'when' genuinely isn't addressed, which P-EXTRACT must say explicitly rather than guess (see ai/prompts/P-EXTRACT.v1.md rule 3).",
+  "input": {
+    "raw_model_output": {
+      "summary": "A firm holding client money must keep it segregated from the firm's own money.",
+      "obligation_type": "record-keeping",
+      "who": {"value": "firms holding client money", "clause_ref": "CASS 7.1", "confidence": 90},
+      "what": {"value": "segregate client money from the firm's own money", "clause_ref": "CASS 7.1", "confidence": 93},
+      "when": {"value": "not specified in this clause", "clause_ref": "CASS 7.1", "confidence": 20},
+      "threshold": {"value": "holds client money", "clause_ref": "CASS 7.1", "confidence": 88},
+      "enforcer": {"value": "the FCA", "clause_ref": "CASS 7.1", "confidence": 70},
+      "confidence": 82
+    }
+  },
+  "expected": {
+    "summary": "A firm holding client money must keep it segregated from the firm's own money.",
+    "obligation_type": "record-keeping",
+    "who": {"value": "firms holding client money", "clause_ref": "CASS 7.1", "confidence": 90},
+    "what": {"value": "segregate client money from the firm's own money", "clause_ref": "CASS 7.1", "confidence": 93},
+    "when": {"value": "not specified in this clause", "clause_ref": "CASS 7.1", "confidence": 20},
+    "threshold": {"value": "holds client money", "clause_ref": "CASS 7.1", "confidence": 88},
+    "enforcer": {"value": "the FCA", "clause_ref": "CASS 7.1", "confidence": 70},
+    "confidence": 82
+  }
+}

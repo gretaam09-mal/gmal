@@ -1,0 +1,16 @@
+{
+  "identity.company_name": "Northgate Advisory Limited",
+  "scale.band": "small",
+  "scale.employee_count": 12,
+  "scale.annual_revenue_gbp": 1500000,
+  "activity.sector": "management consultancy",
+  "activity.sic_codes": ["70229"],
+  "footprint.has_overseas_operations": false,
+  "footprint.processes_personal_data": true,
+  "footprint.holds_client_money": false,
+  "footprint.employs_staff": true,
+  "footprint.regulated_activity": false,
+  "footprint.handles_hazardous_materials": false,
+  "cost_sketch.compliance_headcount": 0,
+  "cost_sketch.annual_compliance_spend_gbp": 5000
+}

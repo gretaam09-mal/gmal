@@ -38,6 +38,13 @@ class Settings(BaseSettings):
     companies_house_api_key: str | None = None
     companies_house_base_url: str = "https://api.company-information.service.gov.uk"
 
+    # P-EXTRACT / P-PREDICATE-ASSIST (services/extraction, services/predicate_assist)
+    # — see ai/prompts/. Unset in dev/CI/tests, which always inject a
+    # fixture-backed provider instead (see services/extraction/fixture_provider.py)
+    # rather than needing a real key to run the suite.
+    anthropic_api_key: str | None = None
+    anthropic_extraction_model: str = "claude-sonnet-5"
+
     # Comma-separated origins allowed to call the API from a browser (the
     # frontend is on a different host in every deployment). "*" in dev.
     cors_allowed_origins: str = "*"

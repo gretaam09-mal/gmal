@@ -26,8 +26,14 @@ from api.main import app
 #  - /invites/accept: the whole point is a user who isn't a member yet;
 #    it derives tenant/workspace from a signed token instead (see
 #    services/invites.py) and applies workspace_session itself.
+#  - /me: the caller's own identity, not any workspace's data.
+#  - /admin/*: F3's instrument-onboarding workbench. instruments/clauses/
+#    obligations/predicates/cost_templates are shared reference data, not
+#    tenant data (see db/models/regulatory.py's module docstring) — gated
+#    by require_staff instead, which test_route_admin_gating.py checks.
 _EXEMPT = {
     ("GET", "/health"),
+    ("GET", "/me"),
     ("GET", "/roles"),
     ("GET", "/profile-field-catalog"),
     ("POST", "/tenants"),
@@ -35,6 +41,23 @@ _EXEMPT = {
     ("POST", "/tenants/{tenant_id}/workspaces"),
     ("GET", "/tenants/{tenant_id}/workspaces"),
     ("POST", "/invites/accept"),
+    ("POST", "/admin/instruments"),
+    ("GET", "/admin/instruments"),
+    ("GET", "/admin/instruments/{instrument_id}"),
+    ("GET", "/admin/instruments/{instrument_id}/obligations"),
+    ("POST", "/admin/clauses/{clause_id}/obligations/extract"),
+    ("PATCH", "/admin/obligations/{obligation_id}"),
+    ("POST", "/admin/obligations/{obligation_id}/approve"),
+    ("POST", "/admin/obligations/{obligation_id}/correct"),
+    ("POST", "/admin/obligations/{obligation_id}/predicates/draft"),
+    ("POST", "/admin/obligations/{obligation_id}/predicates"),
+    ("GET", "/admin/obligations/{obligation_id}/predicates"),
+    ("PATCH", "/admin/predicates/{predicate_id}"),
+    ("POST", "/admin/predicates/{predicate_id}/test"),
+    ("POST", "/admin/predicates/{predicate_id}/approve"),
+    ("POST", "/admin/obligations/{obligation_id}/cost-template"),
+    ("GET", "/admin/obligations/{obligation_id}/cost-template"),
+    ("GET", "/admin/metrics/onboarding"),
 }
 
 
