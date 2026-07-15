@@ -6,6 +6,7 @@ from fastapi import Depends, Header, HTTPException, Path, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from api.config import get_settings
 from db.models import Membership, MembershipStatus, Role, User
 from db.session import raw_session, set_user_context, workspace_session
 from services.audit import record_audit_event
@@ -28,6 +29,40 @@ def get_raw_session() -> Iterator[Session]:
     """
     with raw_session() as session:
         yield session
+
+
+def _maybe_elevate_to_staff(session: Session, user: User) -> None:
+    """PROVISION_ADMIN_EMAILS: a comma-separated allowlist an operator sets
+    so they can reach /admin without a manual scripts/grant_staff.py run
+    against the deployed database. Elevation-only and idempotent by
+    construction:
+
+    - No-op the moment is_staff is already True — this function can never
+      touch is_staff (or anything else) once staff access is granted, so
+      it cannot be used to demote someone dropped from the list, and
+      running it every request never writes more than once per user.
+    - Only ever sets is_staff True; there is no code path here that sets
+      it False. Revocation stays a deliberate, separate action
+      (scripts/grant_staff.py --revoke).
+    - Staff only unlocks /admin's shared reference-data routes (see
+      require_staff) — it carries no workspace Role and does not touch
+      tenant scoping or row-level security anywhere.
+    """
+    if user.is_staff:
+        return
+    if user.email.lower() not in get_settings().admin_emails_list:
+        return
+    user.is_staff = True
+    record_audit_event(
+        session,
+        tenant_id=None,
+        actor_user_id=user.id,
+        action="auth.staff_granted_via_admin_emails",
+        entity_type="user",
+        entity_id=user.id,
+    )
+    session.commit()
+    session.refresh(user)
 
 
 def get_current_user(
@@ -66,6 +101,7 @@ def get_current_user(
         )
         session.commit()
         session.refresh(user)
+    _maybe_elevate_to_staff(session, user)
     return user
 
 

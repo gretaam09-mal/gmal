@@ -53,6 +53,16 @@ class Settings(BaseSettings):
     def cors_allowed_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
 
+    # Comma-separated emails auto-granted staff (admin workbench) access on
+    # their next sign-in — see api/deps.py::_maybe_elevate_to_staff and
+    # docs/runbooks/anthropic-setup.md. Blank by default: nobody is staff
+    # from this mechanism until an operator sets it.
+    admin_emails: str = ""
+
+    @property
+    def admin_emails_list(self) -> list[str]:
+        return [email.strip().lower() for email in self.admin_emails.split(",") if email.strip()]
+
 
 @lru_cache
 def get_settings() -> Settings:
