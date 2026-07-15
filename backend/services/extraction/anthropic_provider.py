@@ -14,6 +14,7 @@ from anthropic import Anthropic
 from pydantic import ValidationError
 
 from api.config import get_settings
+from services.ai.anthropic_calls import create_message
 from services.extraction.provider import ExtractionError
 from services.extraction.schemas import ExtractedObligation
 
@@ -55,7 +56,9 @@ class AnthropicExtractionProvider:
         user_message = (
             f"Instrument: {instrument_title}\nClause {clause_ref}:\n\"\"\"\n{clause_text}\n\"\"\""
         )
-        response = self._client.messages.create(
+        response = create_message(
+            self._client,
+            ExtractionError,
             model=self._model,
             max_tokens=1024,
             temperature=0.0,

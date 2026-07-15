@@ -369,3 +369,42 @@ def test_db_trigger_rejects_raw_sql_update_of_cost_template(db_session):
         )
         db_session.flush()
     db_session.rollback()
+
+
+def test_create_and_get_instrument_over_http_round_trips_in_flight_flag(
+    client_as, make_user, db_session
+):
+    """Regression test: api/routes/admin_instruments.py::_instrument_detail
+    used to build InstrumentDetailOut without passing in_flight, which has
+    no default on the schema — every POST /admin/instruments response and
+    every GET /admin/instruments/{id} raised a pydantic ValidationError
+    (an opaque 500) instead of returning the instrument, breaking the
+    workbench before a reviewer could even see a freshly-ingested
+    instrument's clauses. No prior test in this repo called these routes
+    over HTTP, only their underlying service functions directly, so this
+    bug shipped unnoticed."""
+    staff = make_user()
+    staff.is_staff = True
+    db_session.commit()
+    client = client_as(staff)
+
+    resp = client.post(
+        "/admin/instruments",
+        json={
+            "title": "Test In-Flight Bill",
+            "jurisdiction": "UK",
+            "kind": "Bill",
+            "version_label": "v1",
+            "raw_text": "1. A firm must do the thing.",
+            "in_flight": True,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    created = resp.json()
+    assert created["in_flight"] is True
+    instrument_id = created["id"]
+    assert len(created["versions"][0]["clauses"]) == 1
+
+    resp = client.get(f"/admin/instruments/{instrument_id}")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["in_flight"] is True

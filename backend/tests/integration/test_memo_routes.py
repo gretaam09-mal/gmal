@@ -233,6 +233,86 @@ def test_full_memo_lifecycle_over_http(
     assert new_version.json()["status"] == "draft"
 
 
+def test_correct_memo_obligation_and_cost_template_over_http(
+    client_as, make_user, db_session, composition_provider_fixture
+):
+    """No prior test called these two routes over HTTP (see
+    test_review_corrections.py, which only exercises the underlying
+    services/review.py functions directly) — only a real HTTP round trip
+    proves CorrectionOut serialization actually works, the way the
+    in_flight bug in admin_instruments.py proved this class of gap is
+    real (see test_instrument_onboarding.py)."""
+    owner = make_user()
+    owner_client = client_as(owner)
+    workspace = _create_tenant_and_workspace(owner_client)
+
+    obligation, predicate = _approved_predicate_bound_to_new_obligation(
+        db_session,
+        make_user,
+        expression={"field": "footprint.processes_personal_data", "equals": True},
+    )
+    attach_cost_template(
+        db_session,
+        obligation=obligation,
+        name="DPO cost",
+        drivers=[{"key": "scale.employee_count", "label": "Employee count"}],
+        formula={"base": 5000, "terms": [{"driver": "scale.employee_count", "rate": 40}]},
+        currency="GBP",
+        source_basis="expert estimate",
+        maturity_tier="rough",
+    )
+    db_session.commit()
+
+    memo = _create_memo_via_http(owner_client, workspace, composition_provider_fixture, predicate)
+    version_id = memo["versions"][0]["id"]
+
+    # Cost-template correction first, while `obligation.id` is still the
+    # current version — obligation correction below closes this id
+    # (bitemporal versioning supersedes it with a new row/id), so it must
+    # run second or this lookup would 404 against the now-stale id.
+    cost_template_correction = owner_client.post(
+        f"/workspaces/{workspace['id']}/memos/{memo['id']}/versions/{version_id}"
+        f"/obligations/{obligation.id}/cost-template/correct",
+        json={
+            "name": "DPO cost (revised)",
+            "drivers": [{"key": "scale.employee_count", "label": "Employee count"}],
+            "formula": {"base": 8000, "terms": [{"driver": "scale.employee_count", "rate": 45}]},
+            "currency": "GBP",
+            "source_basis": "vendor quote",
+            "maturity_tier": "quoted",
+            "note": "Vendor quote came in higher than the initial estimate.",
+        },
+    )
+    assert cost_template_correction.status_code == 201, cost_template_correction.text
+    template_correction_body = cost_template_correction.json()
+    assert template_correction_body["memo_version_id"] == version_id
+    assert template_correction_body["cost_template_id"] is not None
+    assert template_correction_body["obligation_id"] is None
+    assert (
+        template_correction_body["note"]
+        == "Vendor quote came in higher than the initial estimate."
+    )
+
+    obligation_correction = owner_client.post(
+        f"/workspaces/{workspace['id']}/memos/{memo['id']}/versions/{version_id}"
+        f"/obligations/{obligation.id}/correct",
+        json={
+            "summary": "Appoint a data protection officer within 30 days.",
+            "obligation_type": "appointment",
+            "fields": {k: v for k, v in obligation.fields.items()},
+            "confidence": 95,
+            "note": "The original extraction missed the 30-day deadline.",
+        },
+    )
+    assert obligation_correction.status_code == 201, obligation_correction.text
+    correction_body = obligation_correction.json()
+    assert correction_body["memo_version_id"] == version_id
+    assert correction_body["obligation_id"] is not None
+    assert correction_body["cost_template_id"] is None
+    assert correction_body["corrected_by_user_id"] == str(owner.id)
+    assert correction_body["note"] == "The original extraction missed the 30-day deadline."
+
+
 def test_viewer_cannot_create_a_memo(
     client_as, make_user, db_session, composition_provider_fixture
 ):

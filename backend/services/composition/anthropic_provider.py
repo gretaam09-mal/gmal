@@ -13,6 +13,7 @@ from anthropic import Anthropic
 from pydantic import ValidationError
 
 from api.config import get_settings
+from services.ai.anthropic_calls import create_message
 from services.composition.context import MemoComposeContext, ObligationComposeInput
 from services.composition.provider import CompositionError
 from services.composition.schemas import ComposedMemoProse
@@ -85,7 +86,9 @@ class AnthropicCompositionProvider:
         self._system_prompt = _load_system_prompt()
 
     def compose(self, context: MemoComposeContext) -> ComposedMemoProse:
-        response = self._client.messages.create(
+        response = create_message(
+            self._client,
+            CompositionError,
             model=self._model,
             max_tokens=2048,
             temperature=0.0,

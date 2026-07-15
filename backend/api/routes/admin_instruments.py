@@ -85,6 +85,7 @@ def _instrument_detail(session: Session, instrument: Instrument) -> InstrumentDe
         jurisdiction=instrument.jurisdiction,
         kind=instrument.kind,
         citation=instrument.citation,
+        in_flight=instrument.in_flight,
         recorded_at=instrument.recorded_at,
         versions=[
             InstrumentVersionOut(

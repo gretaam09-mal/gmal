@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from api.config import get_settings
 from engine.diff import Change
+from services.ai.anthropic_calls import create_message
 from services.diff_note.provider import DiffNoteError
 from services.diff_note.schemas import ComposedDiffNote
 from services.diff_note.validator import validate_diff_note
@@ -58,7 +59,9 @@ class AnthropicDiffNoteProvider:
         self._system_prompt = _load_system_prompt()
 
     def summarise(self, changes: tuple[Change, ...]) -> ComposedDiffNote:
-        response = self._client.messages.create(
+        response = create_message(
+            self._client,
+            DiffNoteError,
             model=self._model,
             max_tokens=512,
             temperature=0.0,

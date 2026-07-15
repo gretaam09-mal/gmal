@@ -1,14 +1,17 @@
-# Anthropic API setup (P-EXTRACT / P-PREDICATE-ASSIST)
+# Anthropic API setup (P-EXTRACT / P-PREDICATE-ASSIST / P-COMPOSE / P-DIFF-NOTE)
 
-The F3 instrument-onboarding workbench's two AI-assisted steps —
-extracting a structured obligation from a clause (`ai/prompts/P-EXTRACT.v1.md`)
-and drafting a predicate for expert review (`ai/prompts/P-PREDICATE-ASSIST.v1.md`)
-— call the Anthropic API. No test, golden-set case, or the
-`scripts/populate_sample_instruments.py` seed script makes a live call —
-they all use `FixtureExtractionProvider` /
-`FixturePredicateAssistProvider` (see `services/extraction/fixture_provider.py`),
-so a key is only needed to actually onboard a *new* instrument through the
-admin UI, not to run the test suite or CI.
+Four AI-assisted steps call the Anthropic API: extracting a structured
+obligation from a clause in the instrument-onboarding workbench
+(`ai/prompts/P-EXTRACT.v1.md`), drafting a predicate for expert review
+(`ai/prompts/P-PREDICATE-ASSIST.v1.md`), composing an Impact Memo's prose
+(`ai/prompts/P-COMPOSE.v1.md`), and summarising what changed between two
+memo versions (`ai/prompts/P-DIFF-NOTE.v1.md`). No test, golden-set case, or
+the `scripts/populate_sample_instruments.py` seed script makes a live call —
+they all use the fixture-backed providers (see
+`services/extraction/fixture_provider.py` and its siblings under
+`services/composition/`, `services/predicate_assist/`, `services/diff_note/`),
+so a key is only needed to actually onboard a *new* instrument or generate a
+*new* Impact Memo through the app, not to run the test suite or CI.
 
 ## What to create
 
@@ -17,17 +20,27 @@ admin UI, not to run the test suite or CI.
 
 ## Where the key goes
 
-Backend (`backend/.env`, not committed):
+Local backend (`backend/.env`, not committed):
 
 ```
 PROVISION_ANTHROPIC_API_KEY=your-key-here
 ```
 
+Deployed (Render): the `render.yaml` Blueprint declares
+`PROVISION_ANTHROPIC_API_KEY` as a `sync: false` secret on `provision-api` —
+Render prompts for it when you apply the Blueprint, or you can set/update it
+later under that service's Environment tab.
+
 Without it, `api/deps.py::get_extraction_provider` /
-`get_predicate_assist_provider` construct `AnthropicExtractionProvider` /
-`AnthropicPredicateAssistProvider`, which raise a clear "not configured"
-error (surfaced to the admin UI as a 502) rather than crashing the app —
-same fail-closed shape as `services/companies_house`.
+`get_predicate_assist_provider` / `get_composition_provider` /
+`get_diff_note_provider` construct their respective `Anthropic*Provider`,
+which raise a clear "not configured" error (surfaced to the UI as a 502 with
+a message naming `PROVISION_ANTHROPIC_API_KEY`, via the global exception
+handlers in `api/main.py`) rather than crashing the app — same fail-closed
+shape as `services/companies_house`. An invalid key (rejected at call time)
+or a transient Anthropic outage is caught the same way, by
+`services/ai/anthropic_calls.py`, and also comes back as a clear 502 rather
+than a raw SDK exception.
 
 ## Staff access to the workbench
 
