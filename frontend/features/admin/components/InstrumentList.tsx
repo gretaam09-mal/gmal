@@ -95,6 +95,12 @@ export function InstrumentList() {
 
       <section className="flex flex-col gap-3 rounded-md border border-ink/10 p-4">
         <h2 className="font-ui text-lg font-semibold text-ink">Ingest a new instrument</h2>
+        <p className="font-ui text-xs text-ink/60">
+          Onboarding one instrument: paste its text below → extract each clause with P-EXTRACT →
+          review the drafted obligations (fields it&apos;s unsure about are flagged and shown
+          first) → author or adjust a predicate → attach a cost template → approve. Nothing reaches
+          a client until an obligation is explicitly approved.
+        </p>
         <form onSubmit={handleCreate} className="flex flex-col gap-2">
           <div className="flex gap-2">
             <input
