@@ -51,6 +51,12 @@ services:
       # real key set here to actually draft obligations or compose memos.
       - key: PROVISION_ANTHROPIC_API_KEY
         sync: false
+      # Optional — see docs/runbooks/anthropic-setup.md "Staff access to
+      # the workbench". Comma-separated emails auto-granted /admin access
+      # on their next sign-in. Blank by default: nobody is elevated by
+      # this mechanism until you set it.
+      - key: PROVISION_ADMIN_EMAILS
+        sync: false
       # Set to the frontend's Render URL once you know it (see
       # provision-web below) so the browser is allowed to call this API.
       - key: PROVISION_CORS_ALLOWED_ORIGINS

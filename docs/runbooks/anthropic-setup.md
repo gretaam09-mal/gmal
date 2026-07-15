@@ -46,10 +46,26 @@ than a raw SDK exception.
 
 The admin workbench (`/admin`) is gated by `User.is_staff`, which is
 `False` for everyone by default — there's no self-serve way to become
-staff. Grant it to yourself (after signing in once, so a `User` row
-exists):
+staff. Two ways to grant it:
+
+**`PROVISION_ADMIN_EMAILS`** (the deployed-app way): a comma-separated
+allowlist of emails, e.g. `you@example.com,teammate@example.com`. Set it on
+`provision-api` (in `render.yaml` it's declared as a `sync: false` secret —
+blank by default, so nobody is elevated by this mechanism until you set it)
+and sign in again — `api/deps.py::_maybe_elevate_to_staff` runs on every
+authenticated request and sets `is_staff = True` the first time it sees a
+matching email, writing an `auth.staff_granted_via_admin_emails` audit
+event. It is elevation-only: it never sets `is_staff` back to `False`, so
+removing an email from the list later does not revoke access (nothing in
+this codebase auto-revokes staff) — the flag only unlocks the shared
+reference-data routes under `/admin`; it carries no workspace `Role` and
+does not touch tenant scoping or row-level security anywhere else.
+
+**`scripts/grant_staff.py`** (local dev, or to revoke): after signing in
+once, so a `User` row exists —
 
 ```
 cd backend
 poetry run python -m scripts.grant_staff you@example.com
+poetry run python -m scripts.grant_staff you@example.com --revoke
 ```
