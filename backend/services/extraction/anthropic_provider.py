@@ -13,9 +13,14 @@ from anthropic import Anthropic
 from pydantic import ValidationError
 
 from api.config import get_settings
-from services.ai.anthropic_calls import create_json_message
+from services.ai.anthropic_calls import create_tool_message
 from services.extraction.provider import ExtractionError
 from services.extraction.schemas import ExtractedObligation
+
+_TOOL_NAME = "record_extracted_obligation"
+_TOOL_DESCRIPTION = (
+    "Records the single structured obligation extracted from the given clause."
+)
 
 _PROMPT_PATH = (
     Path(__file__).resolve().parents[3] / "ai" / "prompts" / "P-EXTRACT.v1.md"
@@ -55,13 +60,16 @@ class AnthropicExtractionProvider:
         user_message = (
             f"Instrument: {instrument_title}\nClause {clause_ref}:\n\"\"\"\n{clause_text}\n\"\"\""
         )
-        data = create_json_message(
+        data = create_tool_message(
             self._client,
             ExtractionError,
             model=self._model,
             max_tokens=1024,
             system=self._system_prompt,
             messages=[{"role": "user", "content": user_message}],
+            tool_name=_TOOL_NAME,
+            tool_description=_TOOL_DESCRIPTION,
+            input_schema=ExtractedObligation.model_json_schema(),
         )
         try:
             return ExtractedObligation.model_validate(data)

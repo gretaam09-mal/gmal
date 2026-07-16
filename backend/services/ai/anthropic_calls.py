@@ -7,38 +7,39 @@ transient outage) raises a raw SDK exception that no route catches,
 which FastAPI turns into an opaque 500 — exactly what CONVENTIONS.md's
 fail-closed-with-a-clear-error expectation rules out.
 
-This is also the one place that turns a model's raw text response into a
-parsed JSON object for every one of those four prompts, all of which
-share the same contract: "respond with exactly one JSON object, nothing
-else." Models occasionally break that contract anyway — wrapping the
-object in a ```json fence, or adding a sentence of preamble/trailing
-commentary — despite every prompt explicitly asking for raw JSON. See
-create_json_message for the defence.
+This is also the one place every one of those four providers gets
+schema-shaped structured output from the model. Earlier versions of this
+module asked the model to emit JSON as plain text and recovered it
+afterwards (stripping markdown fences, scanning for balanced braces,
+retrying with a correction) — but that only ever reduces how often the
+model's free text fails to parse, it can't eliminate it: a model can
+still emit an unclosed brace or a truncated string in the middle of
+prose generation, and no amount of after-the-fact recovery fixes JSON
+that was never well-formed to begin with.
 
-Every request built here uses the plain, universally-supported Messages
-API shape: `system` + a `messages` list that always ends with a `user`
-turn, and no parameter beyond `model`/`max_tokens`/`system`/`messages`.
-Two things this deliberately avoids, both because Claude models differ
-on whether they accept them (as this codebase learned the hard way from
-two separate live 400s): a `temperature` (or other sampling) parameter,
-and assistant-message prefill (ending `messages` with a partial
-`assistant` turn for the model to continue) — some models reject prefill
-outright ("the conversation must end with a user message"). Robustness
-against fenced/prose-wrapped JSON instead comes entirely from the prompt
-text plus extract_json_object's recovery below, which works against any
-model's plain-text output.
+create_tool_message replaces that approach with Anthropic tool use:
+the caller's schema is declared as a tool, tool_choice forces the model
+to answer through exactly that tool call, and the API constructs the
+`input` payload itself from constrained, schema-guided generation — so
+the well-formedness class of failure (mismatched braces, truncated
+strings) cannot happen. There is no text to parse; `.input` on the
+resulting tool_use block is already a dict.
+
+Every request built here still uses the plain, universal request shape
+otherwise: no `temperature` (or other sampling parameter) and no
+assistant-message prefill — some Claude models reject one or both of
+those outright, as this codebase learned from two separate live 400s.
+tools/tool_choice, by contrast, are core Messages API features every
+current Claude model supports, so adding them doesn't reintroduce that
+problem.
 """
 from __future__ import annotations
 
-import json
-import re
 from typing import Any, TypeVar
 
 import anthropic
 
 _ErrorT = TypeVar("_ErrorT", bound=Exception)
-
-_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*\n?(.*?)\n?```", re.DOTALL)
 
 
 def create_message(
@@ -66,56 +67,14 @@ def create_message(
         raise error_cls(f"The Anthropic API request failed: {exc}") from exc
 
 
-def _response_text(response: anthropic.types.Message) -> str:
-    return "".join(block.text for block in response.content if block.type == "text")
+def _find_tool_input(response: anthropic.types.Message, tool_name: str) -> dict[str, Any] | None:
+    for block in response.content:
+        if block.type == "tool_use" and block.name == tool_name:
+            return block.input
+    return None
 
 
-def extract_json_object(raw: str) -> str:
-    """Best-effort recovery of a single JSON object from a model's raw
-    text response: strips a ```json / ``` markdown fence if present, then
-    scans for the outermost balanced {...} to drop any leading or
-    trailing prose the model added around it. Brace-matching is
-    string-aware (a '{' or '}' inside a quoted JSON string doesn't count)
-    so prose *inside* the object's own string values can't confuse it.
-
-    Returns the input unchanged (trimmed) if no '{' is found at all, so
-    a caller's own json.loads still fails with a sensible error instead
-    of this silently returning something else.
-    """
-    text = raw.strip()
-    fence_match = _JSON_FENCE_RE.search(text)
-    if fence_match:
-        text = fence_match.group(1).strip()
-
-    start = text.find("{")
-    if start == -1:
-        return text
-
-    depth = 0
-    in_string = False
-    escaped = False
-    for i in range(start, len(text)):
-        char = text[i]
-        if in_string:
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == '"':
-                in_string = False
-            continue
-        if char == '"':
-            in_string = True
-        elif char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0:
-                return text[start : i + 1]
-    return text[start:]  # unbalanced (e.g. truncated at max_tokens) — let json.loads raise
-
-
-def _try_parse_json_call(
+def create_tool_message(
     client: anthropic.Anthropic,
     error_cls: type[_ErrorT],
     *,
@@ -123,84 +82,55 @@ def _try_parse_json_call(
     max_tokens: int,
     system: str,
     messages: list[dict[str, Any]],
-) -> tuple[dict[str, Any] | None, str]:
-    """One call attempt: calls the model with `messages` exactly as given
-    (must already end with a `user` turn — no assistant prefill), then
-    extracts and parses the result. Returns (None, raw) on failure so the
-    caller can decide whether to retry or give up, without losing the
-    raw text for the error message either way.
-    """
-    response = create_message(
-        client,
-        error_cls,
-        model=model,
-        max_tokens=max_tokens,
-        system=system,
-        messages=messages,
-    )
-    raw = _response_text(response)
-    try:
-        return json.loads(extract_json_object(raw)), raw
-    except json.JSONDecodeError:
-        return None, raw
-
-
-def create_json_message(
-    client: anthropic.Anthropic,
-    error_cls: type[_ErrorT],
-    *,
-    model: str,
-    max_tokens: int,
-    system: str,
-    messages: list[dict[str, Any]],
+    tool_name: str,
+    tool_description: str,
+    input_schema: dict[str, Any],
 ) -> dict[str, Any]:
-    """For the shared "respond with exactly one JSON object" contract
-    every P-EXTRACT/P-PREDICATE-ASSIST/P-COMPOSE/P-DIFF-NOTE call makes.
-    Guards the whole class of "model didn't return clean JSON" failures,
-    using only the plain, universally-supported request shape (no
-    assistant prefill, no temperature — see the module docstring):
+    """Structured-output call: declares (tool_name, tool_description,
+    input_schema) as the model's one available tool and forces the
+    response through it (tool_choice pins the specific tool, so there's
+    no ambiguity about whether — or which — tool to call). Returns
+    tool_use.input directly — already a parsed dict, schema-guided by
+    the API, never free text this module has to recover JSON from.
 
-    1. Calls the model with `messages` as given and runs the response
-       through extract_json_object (strips a markdown fence and any
-       leading/trailing prose, then parses the recovered object).
-    2. If that isn't parseable (still fenced/prose-wrapped, or
-       truncated), retries once: the failed output is fed back as a
-       completed assistant turn, followed by a new user turn asking
-       explicitly for "the raw JSON object, no markdown code fences, no
-       explanation" — a normal multi-turn exchange, not prefill, so
-       every model accepts it.
-    3. Raises error_cls with a clear message (including a snippet of the
-       unparseable output) if both attempts fail, rather than letting a
-       raw json.JSONDecodeError escape.
-
-    Returns the parsed dict — callers still run their own Pydantic
-    model_validate on it, so schema validation is unchanged.
+    Retries once, with a plain follow-up user turn, if the model still
+    doesn't produce a usable call to that tool (e.g. generation cut off
+    by max_tokens before the tool call completed) — ordinary multi-turn
+    history, not assistant-message prefill, so every model accepts it.
+    Raises error_cls if both attempts fail.
     """
-    parsed, raw = _try_parse_json_call(
-        client, error_cls, model=model, max_tokens=max_tokens, system=system, messages=messages
-    )
-    if parsed is not None:
-        return parsed
+    tool = {"name": tool_name, "description": tool_description, "input_schema": input_schema}
+    tool_choice = {"type": "tool", "name": tool_name}
 
-    correction = (
-        f"Your previous response could not be parsed as JSON: {raw!r}\n\n"
-        "Return ONLY the raw JSON object — no markdown code fences, no "
-        "explanation, and no text before or after it."
-    )
+    def _attempt(attempt_messages: list[dict[str, Any]]) -> dict[str, Any] | None:
+        response = create_message(
+            client,
+            error_cls,
+            model=model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=attempt_messages,
+            tools=[tool],
+            tool_choice=tool_choice,
+        )
+        return _find_tool_input(response, tool_name)
+
+    result = _attempt(messages)
+    if result is not None:
+        return result
+
     retry_messages = [
         *messages,
-        {"role": "assistant", "content": raw},
-        {"role": "user", "content": correction},
+        {
+            "role": "user",
+            "content": (
+                f"Your previous response did not produce a complete call to the "
+                f"{tool_name} tool. Please call it again with the complete data."
+            ),
+        },
     ]
-    parsed, raw = _try_parse_json_call(
-        client,
-        error_cls,
-        model=model,
-        max_tokens=max_tokens,
-        system=system,
-        messages=retry_messages,
-    )
-    if parsed is not None:
-        return parsed
+    result = _attempt(retry_messages)
+    if result is not None:
+        return result
 
-    raise error_cls(f"Model did not return valid JSON after a retry: {raw!r}")
+    raise error_cls(f"Model did not produce a valid {tool_name} tool call after a retry.")

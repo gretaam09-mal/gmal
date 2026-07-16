@@ -13,12 +13,17 @@ from anthropic import Anthropic
 from pydantic import ValidationError
 
 from api.config import get_settings
-from services.ai.anthropic_calls import create_json_message
+from services.ai.anthropic_calls import create_tool_message
 from services.predicate_assist.provider import PredicateAssistError
 from services.predicate_assist.schemas import DraftedPredicate
 
 _PROMPT_PATH = (
     Path(__file__).resolve().parents[3] / "ai" / "prompts" / "P-PREDICATE-ASSIST.v1.md"
+)
+
+_TOOL_NAME = "record_drafted_predicate"
+_TOOL_DESCRIPTION = (
+    "Records a draft predicate expression for a human reviewer to check and approve."
 )
 
 
@@ -60,13 +65,16 @@ class AnthropicPredicateAssistProvider:
             f"Threshold: {threshold_value} (cited: {threshold_clause_ref})\n\n"
             f"Available profile fields:\n{json.dumps(available_fields)}"
         )
-        data = create_json_message(
+        data = create_tool_message(
             self._client,
             PredicateAssistError,
             model=self._model,
             max_tokens=1024,
             system=self._system_prompt,
             messages=[{"role": "user", "content": user_message}],
+            tool_name=_TOOL_NAME,
+            tool_description=_TOOL_DESCRIPTION,
+            input_schema=DraftedPredicate.model_json_schema(),
         )
         try:
             return DraftedPredicate.model_validate(data)

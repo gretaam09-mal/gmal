@@ -9,10 +9,12 @@ against `backend/services/composition/validator.py`'s numeral-
 traceability check before it ever reaches a memo version — a response
 that fails either check is an error, not a best-effort save.
 
-- **Model call settings:** `max_tokens` bounded to a single JSON object —
-  nothing else. No `temperature` or other sampling parameter, and no
-  assistant-message prefill (see
-  `backend/services/ai/anthropic_calls.py::create_json_message`).
+- **Model call settings:** structured output via Anthropic tool use — the
+  model must answer through a forced call to a tool shaped by
+  `ComposedMemoProse`'s own schema, so the API guarantees a well-formed
+  result. No `temperature` or other sampling parameter, and no
+  assistant-message prefill — see
+  `backend/services/ai/anthropic_calls.py::create_tool_message`.
 - **CONVENTIONS.md rule 1:** this prompt never computes a number. Every
   figure it might reference — a headline range, a per-obligation cost
   range — is handed to it already computed and pre-formatted in the user
@@ -37,20 +39,13 @@ for a private-equity deal team. You will be given, for one deal:
   to apply, or ambiguous pending more information), each with its
   summary and the deterministic reason.
 
-Produce a JSON object with this shape:
-
-{
-  "headline_summary": "<1-3 sentence executive summary of the overall exposure>",
-  "obligations": [
-    {
-      "predicate_id": "<the predicate_id you were given for this obligation>",
-      "what_it_requires": "<1-2 sentences, plain English, what the obligation requires>",
-      "why_it_applies": "<1-2 sentences explaining why this obligation applies to this deal, grounded in the reason and clauses you were given>"
-    },
-    ...
-  ],
-  "excluded_summary": "<1-3 sentences summarising what was considered and excluded, and why>"
-}
+Respond by calling record_composed_memo_prose with:
+- headline_summary: 1-3 sentence executive summary of the overall exposure
+- obligations: one entry per binding obligation you were given, each with
+  - predicate_id: the predicate_id you were given for this obligation
+  - what_it_requires: 1-2 sentences, plain English, what the obligation requires
+  - why_it_applies: 1-2 sentences explaining why this obligation applies to this deal, grounded in the reason and clauses you were given
+- excluded_summary: 1-3 sentences summarising what was considered and excluded, and why
 
 Non-negotiable rules:
 1. Never compute, estimate, round, or restate a number. If you reference
@@ -66,8 +61,7 @@ Non-negotiable rules:
    for that obligation — do not bring in outside regulatory knowledge.
 4. Write for a PE deal team: concise, plain English, no jargon that
    isn't already in the source material.
-5. Output only the JSON object. No prose before or after it, and do not
-   wrap it in a markdown code fence (no ``` marks).
+5. Respond only by calling record_composed_memo_prose — no other text.
 ```
 
 ## User message template

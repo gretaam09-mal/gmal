@@ -11,12 +11,15 @@ from pydantic import ValidationError
 
 from api.config import get_settings
 from engine.diff import Change
-from services.ai.anthropic_calls import create_json_message
+from services.ai.anthropic_calls import create_tool_message
 from services.diff_note.provider import DiffNoteError
 from services.diff_note.schemas import ComposedDiffNote
 from services.diff_note.validator import validate_diff_note
 
 _PROMPT_PATH = Path(__file__).resolve().parents[3] / "ai" / "prompts" / "P-DIFF-NOTE.v1.md"
+
+_TOOL_NAME = "record_diff_note"
+_TOOL_DESCRIPTION = "Records the one-paragraph plain-English note explaining what changed."
 
 
 class DiffNoteNotConfiguredError(DiffNoteError):
@@ -58,13 +61,16 @@ class AnthropicDiffNoteProvider:
         self._system_prompt = _load_system_prompt()
 
     def summarise(self, changes: tuple[Change, ...]) -> ComposedDiffNote:
-        data = create_json_message(
+        data = create_tool_message(
             self._client,
             DiffNoteError,
             model=self._model,
             max_tokens=512,
             system=self._system_prompt,
             messages=[{"role": "user", "content": _render_user_message(changes)}],
+            tool_name=_TOOL_NAME,
+            tool_description=_TOOL_DESCRIPTION,
+            input_schema=ComposedDiffNote.model_json_schema(),
         )
         try:
             note = ComposedDiffNote.model_validate(data)
