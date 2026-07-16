@@ -138,6 +138,17 @@ class MeOut(BaseModel):
     id: uuid.UUID
     email: str
     is_staff: bool
+    admin_emails_configured: bool
+    """Self-diagnostic for PROVISION_ADMIN_EMAILS staff elevation (see
+    api/deps.py::_maybe_elevate_to_staff): True iff the env var is set to
+    a non-empty value on this running process. False here — while the
+    operator is sure they set it — means the deploy hasn't picked it up
+    (e.g. no redeploy since it was set)."""
+    email_matches_admin_list: bool
+    """True iff this user's own email is on that list. False + is_staff
+    False pinpoints an email mismatch (wrong address, or Clerk's session
+    token not including a real email — see docs/runbooks/clerk-setup.md)
+    rather than a missing/misconfigured env var."""
 
     model_config = {"from_attributes": True}
 
