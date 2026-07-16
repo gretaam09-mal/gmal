@@ -101,6 +101,20 @@ def get_current_user(
         )
         session.commit()
         session.refresh(user)
+    elif claims.email and user.email != claims.email:
+        # Clerk is the source of truth for identity, and its session token
+        # doesn't always carry an email claim (depends on the Clerk
+        # Dashboard's session token customization — see
+        # docs/runbooks/clerk-setup.md); a user created before that was
+        # configured has the synthetic "{clerk_user_id}@users.provision.
+        # invalid" placeholder from the branch above forever otherwise.
+        # Re-syncing here means PROVISION_ADMIN_EMAILS elevation (below)
+        # and invite-acceptance-by-email (api/routes/invites.py) start
+        # working on this user's very next request once Clerk starts
+        # sending a real email — no sign-out needed.
+        user.email = claims.email
+        session.commit()
+        session.refresh(user)
     _maybe_elevate_to_staff(session, user)
     return user
 
