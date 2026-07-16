@@ -1,9 +1,11 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { AccountBar } from "@/features/shared/components/AccountBar";
 import { getMe } from "@/lib/me";
 
 type Status = "checking" | "allowed" | "denied";
@@ -46,5 +48,15 @@ export function StaffGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      <header className="flex items-center justify-between border-b border-ink/10 px-8 py-3">
+        <Link href="/dashboard" className="font-ui text-sm font-semibold text-ink">
+          Provision — Instrument workbench
+        </Link>
+        <AccountBar isStaff />
+      </header>
+      {children}
+    </>
+  );
 }
