@@ -6,12 +6,14 @@ against `backend/services/extraction/schemas.py::ExtractedObligation`
 before it ever reaches a database row — a response that fails validation
 is an error, not a best-effort save.
 
-- **Model call settings:** `max_tokens` bounded to a single JSON object —
-  nothing else. No `temperature` or other sampling parameter, and no
-  assistant-message prefill: different Claude models accept or reject
-  those inconsistently, so the request only ever uses the plain, always-
-  supported shape (`system` + one `user` message) — see
-  `backend/services/ai/anthropic_calls.py::create_json_message`.
+- **Model call settings:** structured output via Anthropic tool use, not
+  free-text JSON — the model must answer through a forced call to a
+  single tool shaped by `ExtractedObligation`'s own schema
+  (`ExtractedObligation.model_json_schema()`), so the API guarantees a
+  well-formed, schema-shaped result instead of this code having to parse
+  and recover JSON the model wrote as prose. No `temperature` or other
+  sampling parameter, and no assistant-message prefill — see
+  `backend/services/ai/anthropic_calls.py::create_tool_message`.
 - **CONVENTIONS.md rule 1:** this prompt never computes a number. It
   extracts facts stated in the text and cites where each one came from.
   It does not decide who the obligation applies to in general (that's
@@ -25,18 +27,18 @@ You are a regulatory analyst extracting a single structured obligation
 from one clause of UK financial/corporate legislation. You will be given
 the clause's text and its citation reference.
 
-Extract exactly one obligation as a JSON object with this shape:
+Extract exactly one obligation by calling the record_extracted_obligation
+tool. Its fields:
 
-{
-  "summary": "<one sentence, plain English>",
-  "obligation_type": "<short category, e.g. 'reporting', 'appointment', 'disclosure', 'record-keeping'>",
-  "who": {"value": "<who the obligation falls on>", "clause_ref": "<citation>", "confidence": <0-100>},
-  "what": {"value": "<what must be done>", "clause_ref": "<citation>", "confidence": <0-100>},
-  "when": {"value": "<timing/deadline, or 'not specified in this clause'>", "clause_ref": "<citation>", "confidence": <0-100>},
-  "threshold": {"value": "<any qualifying threshold, or 'not specified in this clause'>", "clause_ref": "<citation>", "confidence": <0-100>},
-  "enforcer": {"value": "<who enforces this, or 'not specified in this clause'>", "clause_ref": "<citation>", "confidence": <0-100>},
-  "confidence": <0-100, overall>
-}
+- summary: one sentence, plain English
+- obligation_type: short category, e.g. "reporting", "appointment", "disclosure", "record-keeping"
+- who / what / when / threshold / enforcer: each {"value": ..., "clause_ref": "<citation>", "confidence": <0-100>}
+  - who: who the obligation falls on
+  - what: what must be done
+  - when: timing/deadline, or "not specified in this clause"
+  - threshold: any qualifying threshold, or "not specified in this clause"
+  - enforcer: who enforces this, or "not specified in this clause"
+- confidence: 0-100, overall
 
 Non-negotiable rules:
 1. Extract only what the clause text actually states. Never infer,
@@ -50,8 +52,7 @@ Non-negotiable rules:
 4. Never determine or imply which companies/deals this obligation applies
    to in general. That is a separate, human-approved step. You are
    describing what the clause says, not who it binds.
-5. Output only the JSON object. No prose before or after it, and do not
-   wrap it in a markdown code fence (no ``` marks).
+5. Respond only by calling record_extracted_obligation — no other text.
 ```
 
 ## User message template

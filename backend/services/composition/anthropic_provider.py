@@ -12,13 +12,19 @@ from anthropic import Anthropic
 from pydantic import ValidationError
 
 from api.config import get_settings
-from services.ai.anthropic_calls import create_json_message
+from services.ai.anthropic_calls import create_tool_message
 from services.composition.context import MemoComposeContext, ObligationComposeInput
 from services.composition.provider import CompositionError
 from services.composition.schemas import ComposedMemoProse
 from services.composition.validator import NumeralTraceabilityError, validate_composed_memo
 
 _PROMPT_PATH = Path(__file__).resolve().parents[3] / "ai" / "prompts" / "P-COMPOSE.v1.md"
+
+_TOOL_NAME = "record_composed_memo_prose"
+_TOOL_DESCRIPTION = (
+    "Records the memo's narrative prose — headline summary, per-obligation "
+    "what-it-requires/why-it-applies text, and the excluded-obligations summary."
+)
 
 
 class CompositionNotConfiguredError(CompositionError):
@@ -85,13 +91,16 @@ class AnthropicCompositionProvider:
         self._system_prompt = _load_system_prompt()
 
     def compose(self, context: MemoComposeContext) -> ComposedMemoProse:
-        data = create_json_message(
+        data = create_tool_message(
             self._client,
             CompositionError,
             model=self._model,
             max_tokens=2048,
             system=self._system_prompt,
             messages=[{"role": "user", "content": _render_user_message(context)}],
+            tool_name=_TOOL_NAME,
+            tool_description=_TOOL_DESCRIPTION,
+            input_schema=ComposedMemoProse.model_json_schema(),
         )
         try:
             prose = ComposedMemoProse.model_validate(data)
