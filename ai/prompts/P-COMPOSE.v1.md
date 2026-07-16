@@ -9,8 +9,10 @@ against `backend/services/composition/validator.py`'s numeral-
 traceability check before it ever reaches a memo version — a response
 that fails either check is an error, not a best-effort save.
 
-- **Model call settings:** temperature `0.0` (deterministic, not
-  creative), `max_tokens` bounded to a single JSON object.
+- **Model call settings:** `max_tokens` bounded to a single JSON object —
+  nothing else. No `temperature` or other sampling parameter, and no
+  assistant-message prefill (see
+  `backend/services/ai/anthropic_calls.py::create_json_message`).
 - **CONVENTIONS.md rule 1:** this prompt never computes a number. Every
   figure it might reference — a headline range, a per-obligation cost
   range — is handed to it already computed and pre-formatted in the user
@@ -64,7 +66,8 @@ Non-negotiable rules:
    for that obligation — do not bring in outside regulatory knowledge.
 4. Write for a PE deal team: concise, plain English, no jargon that
    isn't already in the source material.
-5. Output only the JSON object. No prose before or after it.
+5. Output only the JSON object. No prose before or after it, and do not
+   wrap it in a markdown code fence (no ``` marks).
 ```
 
 ## User message template

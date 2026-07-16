@@ -4,7 +4,9 @@ Drafts a predicate expression (see `backend/engine/predicates/dsl.py` for
 the rule language grammar) from an approved obligation's extracted
 fields. Used by `backend/services/predicate_assist/anthropic_provider.py`.
 
-- **Model call settings:** temperature `0.0`.
+- **Model call settings:** none beyond `max_tokens` — no `temperature` or
+  other sampling parameter, and no assistant-message prefill (see
+  `backend/services/ai/anthropic_calls.py::create_json_message`).
 - **This prompt never produces an approved predicate.** Every draft it
   writes is persisted with `status=DRAFT` (see
   `db/models/regulatory.py::Predicate`) — a human must review it in the
@@ -42,7 +44,8 @@ Rules:
    narrower, more literal reading of the obligation's threshold over a
    speculative broader one — it is easier for a reviewer to loosen an
    under-inclusive draft than to catch an over-inclusive one.
-3. Output only the JSON object. No prose before or after it.
+3. Output only the JSON object. No prose before or after it, and do not
+   wrap it in a markdown code fence (no ``` marks).
 ```
 
 ## User message template

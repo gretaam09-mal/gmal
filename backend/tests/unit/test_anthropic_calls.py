@@ -105,9 +105,7 @@ def test_extract_json_object_is_not_confused_by_braces_inside_strings():
     assert extract_json_object(raw) == '{"note": "the schema is {a, b, c}"}'
 
 
-def test_extract_json_object_handles_trailing_junk_after_a_prefilled_object():
-    # e.g. the model closed the object then still emitted a stray fence
-    # marker despite the assistant-turn prefill forcing it to start "{"
+def test_extract_json_object_handles_stray_trailing_junk_after_a_complete_object():
     raw = '{"a": 1}\n```'
     assert extract_json_object(raw) == '{"a": 1}'
 
@@ -149,8 +147,12 @@ class _SequencedClient:
         self.messages = _SequencedMessages(responses)
 
 
-def test_create_json_message_prefills_the_assistant_turn_and_parses_in_one_call():
-    client = _SequencedClient(['"a": 1}'])  # continuation after our "{" prefill
+def test_create_json_message_sends_messages_unchanged_and_parses_in_one_call():
+    """No assistant-message prefill — some Claude models reject it
+    outright ("the conversation must end with a user message"), so the
+    messages list handed to the SDK must be exactly what the caller
+    passed in, still ending with that same user turn."""
+    client = _SequencedClient(['{"a": 1}'])
 
     result = create_json_message(
         client,
@@ -163,14 +165,12 @@ def test_create_json_message_prefills_the_assistant_turn_and_parses_in_one_call(
 
     assert result == {"a": 1}
     assert len(client.messages.calls) == 1
-    assert client.messages.calls[0]["messages"] == [
-        {"role": "user", "content": "hi"},
-        {"role": "assistant", "content": "{"},
-    ]
+    assert client.messages.calls[0]["messages"] == [{"role": "user", "content": "hi"}]
+    assert "temperature" not in client.messages.calls[0]
 
 
-def test_create_json_message_strips_a_fence_that_gets_through_despite_the_prefill():
-    client = _SequencedClient(['"a": 1}\n```'])
+def test_create_json_message_strips_a_markdown_fence_around_the_response():
+    client = _SequencedClient(['```json\n{"a": 1}\n```'])
 
     result = create_json_message(
         client,
@@ -185,7 +185,7 @@ def test_create_json_message_strips_a_fence_that_gets_through_despite_the_prefil
 
 
 def test_create_json_message_retries_once_with_a_correction_then_succeeds():
-    client = _SequencedClient(["not json at all", '"a": 1}'])
+    client = _SequencedClient(["not json at all", '{"a": 1}'])
 
     result = create_json_message(
         client,
@@ -199,10 +199,11 @@ def test_create_json_message_retries_once_with_a_correction_then_succeeds():
     assert result == {"a": 1}
     assert len(client.messages.calls) == 2
     retry_messages = client.messages.calls[1]["messages"]
-    assert retry_messages[-1] == {"role": "assistant", "content": "{"}
-    correction = retry_messages[-2]
-    assert correction["role"] == "user"
-    assert "Return ONLY the raw JSON object" in correction["content"]
+    # a completed assistant turn followed by a new user turn — ordinary
+    # multi-turn history, not prefill — so the retry still ends in "user"
+    assert retry_messages[-1]["role"] == "user"
+    assert "Return ONLY the raw JSON object" in retry_messages[-1]["content"]
+    assert retry_messages[-2] == {"role": "assistant", "content": "not json at all"}
 
 
 def test_create_json_message_raises_the_domain_error_after_both_attempts_fail():
