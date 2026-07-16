@@ -91,7 +91,6 @@ class AnthropicCompositionProvider:
             CompositionError,
             model=self._model,
             max_tokens=2048,
-            temperature=0.0,
             system=self._system_prompt,
             messages=[{"role": "user", "content": _render_user_message(context)}],
         )

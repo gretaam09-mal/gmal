@@ -61,7 +61,6 @@ class AnthropicExtractionProvider:
             ExtractionError,
             model=self._model,
             max_tokens=1024,
-            temperature=0.0,
             system=self._system_prompt,
             messages=[{"role": "user", "content": user_message}],
         )
