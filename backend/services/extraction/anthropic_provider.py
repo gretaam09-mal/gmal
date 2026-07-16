@@ -7,14 +7,13 @@ how services/companies_house fails closed without a key).
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from anthropic import Anthropic
 from pydantic import ValidationError
 
 from api.config import get_settings
-from services.ai.anthropic_calls import create_message
+from services.ai.anthropic_calls import create_json_message
 from services.extraction.provider import ExtractionError
 from services.extraction.schemas import ExtractedObligation
 
@@ -56,7 +55,7 @@ class AnthropicExtractionProvider:
         user_message = (
             f"Instrument: {instrument_title}\nClause {clause_ref}:\n\"\"\"\n{clause_text}\n\"\"\""
         )
-        response = create_message(
+        data = create_json_message(
             self._client,
             ExtractionError,
             model=self._model,
@@ -64,11 +63,6 @@ class AnthropicExtractionProvider:
             system=self._system_prompt,
             messages=[{"role": "user", "content": user_message}],
         )
-        raw = "".join(block.text for block in response.content if block.type == "text")
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise ExtractionError(f"P-EXTRACT returned non-JSON output: {raw!r}") from exc
         try:
             return ExtractedObligation.model_validate(data)
         except ValidationError as exc:

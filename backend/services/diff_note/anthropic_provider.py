@@ -4,7 +4,6 @@ and why this is never exercised by this repo's tests.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from anthropic import Anthropic
@@ -12,7 +11,7 @@ from pydantic import ValidationError
 
 from api.config import get_settings
 from engine.diff import Change
-from services.ai.anthropic_calls import create_message
+from services.ai.anthropic_calls import create_json_message
 from services.diff_note.provider import DiffNoteError
 from services.diff_note.schemas import ComposedDiffNote
 from services.diff_note.validator import validate_diff_note
@@ -59,7 +58,7 @@ class AnthropicDiffNoteProvider:
         self._system_prompt = _load_system_prompt()
 
     def summarise(self, changes: tuple[Change, ...]) -> ComposedDiffNote:
-        response = create_message(
+        data = create_json_message(
             self._client,
             DiffNoteError,
             model=self._model,
@@ -67,11 +66,6 @@ class AnthropicDiffNoteProvider:
             system=self._system_prompt,
             messages=[{"role": "user", "content": _render_user_message(changes)}],
         )
-        raw = "".join(block.text for block in response.content if block.type == "text")
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise DiffNoteError(f"P-DIFF-NOTE returned non-JSON output: {raw!r}") from exc
         try:
             note = ComposedDiffNote.model_validate(data)
         except ValidationError as exc:

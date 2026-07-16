@@ -13,7 +13,7 @@ from anthropic import Anthropic
 from pydantic import ValidationError
 
 from api.config import get_settings
-from services.ai.anthropic_calls import create_message
+from services.ai.anthropic_calls import create_json_message
 from services.predicate_assist.provider import PredicateAssistError
 from services.predicate_assist.schemas import DraftedPredicate
 
@@ -60,7 +60,7 @@ class AnthropicPredicateAssistProvider:
             f"Threshold: {threshold_value} (cited: {threshold_clause_ref})\n\n"
             f"Available profile fields:\n{json.dumps(available_fields)}"
         )
-        response = create_message(
+        data = create_json_message(
             self._client,
             PredicateAssistError,
             model=self._model,
@@ -68,13 +68,6 @@ class AnthropicPredicateAssistProvider:
             system=self._system_prompt,
             messages=[{"role": "user", "content": user_message}],
         )
-        raw = "".join(block.text for block in response.content if block.type == "text")
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise PredicateAssistError(
-                f"P-PREDICATE-ASSIST returned non-JSON output: {raw!r}"
-            ) from exc
         try:
             return DraftedPredicate.model_validate(data)
         except ValidationError as exc:
