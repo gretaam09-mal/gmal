@@ -34,9 +34,15 @@ a raw session that could cross tenant boundaries. Row-level security in
 Postgres is the backstop, not the only line of defence: application code
 must still scope every query explicitly.
 
-## 4. One feature per branch, a human merges every pull request
+## 4. One feature per branch; `engine/` changes still need a human merge
 
 Branches are scoped to a single feature or fix — no bundling unrelated
-changes to save a review cycle. No pull request merges itself or gets
-merged by automation; a human reviews and merges every one, including PRs
-opened by an agent.
+changes to save a review cycle.
+
+Once every CI check on a pull request is green, the agent may merge its own
+PR into `main` automatically, without waiting for manual review — with one
+exception: any change that touches `backend/engine/` (the pure cost and
+applicability calculation logic — see rule #1) still requires a human to
+review and merge it by hand, however green the checks are. That's the one
+place every number a client sees comes from; nothing merges there on CI
+alone.
