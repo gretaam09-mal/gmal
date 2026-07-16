@@ -14,6 +14,19 @@ else." Models occasionally break that contract anyway — wrapping the
 object in a ```json fence, or adding a sentence of preamble/trailing
 commentary — despite every prompt explicitly asking for raw JSON. See
 create_json_message for the defence.
+
+Every request built here uses the plain, universally-supported Messages
+API shape: `system` + a `messages` list that always ends with a `user`
+turn, and no parameter beyond `model`/`max_tokens`/`system`/`messages`.
+Two things this deliberately avoids, both because Claude models differ
+on whether they accept them (as this codebase learned the hard way from
+two separate live 400s): a `temperature` (or other sampling) parameter,
+and assistant-message prefill (ending `messages` with a partial
+`assistant` turn for the model to continue) — some models reject prefill
+outright ("the conversation must end with a user message"). Robustness
+against fenced/prose-wrapped JSON instead comes entirely from the prompt
+text plus extract_json_object's recovery below, which works against any
+model's plain-text output.
 """
 from __future__ import annotations
 
@@ -111,24 +124,21 @@ def _try_parse_json_call(
     system: str,
     messages: list[dict[str, Any]],
 ) -> tuple[dict[str, Any] | None, str]:
-    """One call attempt: prefills the assistant turn with "{" — Anthropic's
-    documented technique for suppressing a markdown-fenced or
-    prose-wrapped response, since the model's continuation is forced to
-    start mid-object and so can't open with a ```json fence — then
+    """One call attempt: calls the model with `messages` exactly as given
+    (must already end with a `user` turn — no assistant prefill), then
     extracts and parses the result. Returns (None, raw) on failure so the
     caller can decide whether to retry or give up, without losing the
     raw text for the error message either way.
     """
-    prefilled_messages = [*messages, {"role": "assistant", "content": "{"}]
     response = create_message(
         client,
         error_cls,
         model=model,
         max_tokens=max_tokens,
         system=system,
-        messages=prefilled_messages,
+        messages=messages,
     )
-    raw = "{" + _response_text(response)
+    raw = _response_text(response)
     try:
         return json.loads(extract_json_object(raw)), raw
     except json.JSONDecodeError:
@@ -146,15 +156,19 @@ def create_json_message(
 ) -> dict[str, Any]:
     """For the shared "respond with exactly one JSON object" contract
     every P-EXTRACT/P-PREDICATE-ASSIST/P-COMPOSE/P-DIFF-NOTE call makes.
-    Guards the whole class of "model didn't return clean JSON" failures:
+    Guards the whole class of "model didn't return clean JSON" failures,
+    using only the plain, universally-supported request shape (no
+    assistant prefill, no temperature — see the module docstring):
 
-    1. Prefills the assistant turn with "{" on every attempt (see
-       _try_parse_json_call) so the model can't wrap the object in a
-       markdown fence in the first place.
-    2. If the result still isn't parseable (fenced/prose-wrapped despite
-       the prefill, or truncated), retries once with the failed output
-       fed back and an explicit "return ONLY the raw JSON object" and
-       tries again.
+    1. Calls the model with `messages` as given and runs the response
+       through extract_json_object (strips a markdown fence and any
+       leading/trailing prose, then parses the recovered object).
+    2. If that isn't parseable (still fenced/prose-wrapped, or
+       truncated), retries once: the failed output is fed back as a
+       completed assistant turn, followed by a new user turn asking
+       explicitly for "the raw JSON object, no markdown code fences, no
+       explanation" — a normal multi-turn exchange, not prefill, so
+       every model accepts it.
     3. Raises error_cls with a clear message (including a snippet of the
        unparseable output) if both attempts fail, rather than letting a
        raw json.JSONDecodeError escape.

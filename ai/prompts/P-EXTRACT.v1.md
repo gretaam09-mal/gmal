@@ -6,8 +6,12 @@ against `backend/services/extraction/schemas.py::ExtractedObligation`
 before it ever reaches a database row — a response that fails validation
 is an error, not a best-effort save.
 
-- **Model call settings:** temperature `0.0` (deterministic, not
-  creative), `max_tokens` bounded to a single JSON object.
+- **Model call settings:** `max_tokens` bounded to a single JSON object —
+  nothing else. No `temperature` or other sampling parameter, and no
+  assistant-message prefill: different Claude models accept or reject
+  those inconsistently, so the request only ever uses the plain, always-
+  supported shape (`system` + one `user` message) — see
+  `backend/services/ai/anthropic_calls.py::create_json_message`.
 - **CONVENTIONS.md rule 1:** this prompt never computes a number. It
   extracts facts stated in the text and cites where each one came from.
   It does not decide who the obligation applies to in general (that's
@@ -46,7 +50,8 @@ Non-negotiable rules:
 4. Never determine or imply which companies/deals this obligation applies
    to in general. That is a separate, human-approved step. You are
    describing what the clause says, not who it binds.
-5. Output only the JSON object. No prose before or after it.
+5. Output only the JSON object. No prose before or after it, and do not
+   wrap it in a markdown code fence (no ``` marks).
 ```
 
 ## User message template
