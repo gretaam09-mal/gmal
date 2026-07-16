@@ -17,6 +17,15 @@ export default clerkConfigured
       if (isProtectedRoute(req)) {
         await auth.protect();
       }
+      // A signed-in visitor hitting the marketing page has nothing to do
+      // there — send them straight to the dashboard instead of making them
+      // find their own way back in.
+      if (req.nextUrl.pathname === "/") {
+        const { userId } = await auth();
+        if (userId) {
+          return NextResponse.redirect(new URL("/dashboard", req.url));
+        }
+      }
     })
   : () => NextResponse.next();
 

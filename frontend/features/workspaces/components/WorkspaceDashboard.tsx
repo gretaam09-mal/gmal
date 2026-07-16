@@ -7,6 +7,8 @@ import { Button } from "@/design-system/components/button";
 import { ExposureList } from "@/features/exposure";
 import { MemoView, ReviewerQueue } from "@/features/memo";
 import { ProfileEditor } from "@/features/profile/components/ProfileEditor";
+import { AccountBar } from "@/features/shared/components/AccountBar";
+import { getMe } from "@/lib/me";
 
 import { createTenant, createWorkspace, listWorkspaces } from "../api";
 import type { Workspace } from "../types";
@@ -22,10 +24,18 @@ export function WorkspaceDashboard() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("profile");
+  const [isStaff, setIsStaff] = useState(false);
 
   useEffect(() => {
     const stored = typeof window !== "undefined" ? window.localStorage.getItem(LAST_TENANT_KEY) : null;
     if (stored) setTenantId(stored);
+  }, []);
+
+  useEffect(() => {
+    getMe(getToken)
+      .then((me) => setIsStaff(me.is_staff))
+      .catch(() => setIsStaff(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -49,94 +59,97 @@ export function WorkspaceDashboard() {
     setSelectedWorkspaceId(workspace.id);
   }
 
-  if (!tenantId) {
-    return <CreateTenantForm onCreate={handleCreateTenant} />;
-  }
-
   const selectedWorkspace = workspaces.find((w) => w.id === selectedWorkspaceId) ?? null;
 
   return (
     <div className="flex min-h-screen flex-col gap-6 p-8">
       <header className="flex items-center justify-between">
         <h1 className="font-ui text-2xl font-semibold text-ink">Provision</h1>
+        <AccountBar isStaff={isStaff} />
       </header>
 
-      <div className="grid grid-cols-[240px_1fr] gap-6">
-        <aside className="flex flex-col gap-4">
-          <h2 className="font-ui text-sm font-medium uppercase tracking-wide text-ink/50">
-            Assessments
-          </h2>
-          <ul className="flex flex-col gap-1">
-            {workspaces.map((workspace) => (
-              <li key={workspace.id}>
-                <button
-                  onClick={() => setSelectedWorkspaceId(workspace.id)}
-                  className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left font-ui text-sm ${
-                    workspace.id === selectedWorkspaceId ? "bg-ink/10" : "hover:bg-ink/5"
-                  }`}
-                >
-                  <span>{workspace.codename}</span>
-                  {workspace.my_role ? <RoleBadge role={workspace.my_role} /> : null}
-                </button>
-              </li>
-            ))}
-          </ul>
-          <CreateWorkspaceForm onCreate={handleCreateWorkspace} />
-        </aside>
-
-        <main>
-          {selectedWorkspace ? (
-            <div className="flex flex-col gap-6">
-              <div>
-                <h2 className="font-ui text-xl font-semibold text-ink">
-                  {selectedWorkspace.codename}
-                </h2>
-                {selectedWorkspace.real_name ? (
-                  <p className="font-ui text-sm text-ink/50">
-                    Subject company: {selectedWorkspace.real_name}
-                  </p>
-                ) : null}
-              </div>
-
-              <div className="flex gap-4 border-b border-ink/10">
-                {(["profile", "exposure", "memo", "review", "members"] as const).map((tab) => (
+      {!tenantId ? (
+        <CreateTenantForm onCreate={handleCreateTenant} />
+      ) : (
+        <div className="grid grid-cols-[240px_1fr] gap-6">
+          <aside className="flex flex-col gap-4">
+            <h2 className="font-ui text-sm font-medium uppercase tracking-wide text-ink/50">
+              Assessments
+            </h2>
+            <ul className="flex flex-col gap-1">
+              {workspaces.map((workspace) => (
+                <li key={workspace.id}>
                   <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`pb-2 font-ui text-sm capitalize ${
-                      tab === activeTab
-                        ? "border-b-2 border-primary-navy text-ink"
-                        : "text-ink/50 hover:text-ink"
+                    onClick={() => setSelectedWorkspaceId(workspace.id)}
+                    className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left font-ui text-sm ${
+                      workspace.id === selectedWorkspaceId ? "bg-ink/10" : "hover:bg-ink/5"
                     }`}
                   >
-                    {tab}
+                    <span>{workspace.codename}</span>
+                    {workspace.my_role ? <RoleBadge role={workspace.my_role} /> : null}
                   </button>
-                ))}
-              </div>
+                </li>
+              ))}
+            </ul>
+            <CreateWorkspaceForm onCreate={handleCreateWorkspace} />
+          </aside>
 
-              {activeTab === "profile" ? (
-                <ProfileEditor workspaceId={selectedWorkspace.id} />
-              ) : activeTab === "exposure" ? (
-                <ExposureList
-                  workspaceId={selectedWorkspace.id}
-                  onNavigateToProfileField={() => setActiveTab("profile")}
-                />
-              ) : activeTab === "memo" ? (
-                <MemoView workspaceId={selectedWorkspace.id} myRole={selectedWorkspace.my_role} />
-              ) : activeTab === "review" ? (
-                <ReviewerQueue
-                  workspaceId={selectedWorkspace.id}
-                  onSelectMemo={() => setActiveTab("memo")}
-                />
-              ) : (
-                <MembersPanel workspace={selectedWorkspace} getToken={getToken} />
-              )}
-            </div>
-          ) : (
-            <p className="font-ui text-sm text-ink/60">Select or create an assessment to get started.</p>
-          )}
-        </main>
-      </div>
+          <main>
+            {selectedWorkspace ? (
+              <div className="flex flex-col gap-6">
+                <div>
+                  <h2 className="font-ui text-xl font-semibold text-ink">
+                    {selectedWorkspace.codename}
+                  </h2>
+                  {selectedWorkspace.real_name ? (
+                    <p className="font-ui text-sm text-ink/50">
+                      Subject company: {selectedWorkspace.real_name}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="flex gap-4 border-b border-ink/10">
+                  {(["profile", "exposure", "memo", "review", "members"] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setActiveTab(tab)}
+                      className={`pb-2 font-ui text-sm capitalize ${
+                        tab === activeTab
+                          ? "border-b-2 border-primary-navy text-ink"
+                          : "text-ink/50 hover:text-ink"
+                      }`}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+
+                {activeTab === "profile" ? (
+                  <ProfileEditor workspaceId={selectedWorkspace.id} />
+                ) : activeTab === "exposure" ? (
+                  <ExposureList
+                    workspaceId={selectedWorkspace.id}
+                    onNavigateToProfileField={() => setActiveTab("profile")}
+                  />
+                ) : activeTab === "memo" ? (
+                  <MemoView workspaceId={selectedWorkspace.id} myRole={selectedWorkspace.my_role} />
+                ) : activeTab === "review" ? (
+                  <ReviewerQueue
+                    workspaceId={selectedWorkspace.id}
+                    onSelectMemo={() => setActiveTab("memo")}
+                  />
+                ) : (
+                  <MembersPanel workspace={selectedWorkspace} getToken={getToken} />
+                )}
+              </div>
+            ) : (
+              <p className="font-ui text-sm text-ink/60">
+                Select or create an assessment to get started.
+              </p>
+            )}
+          </main>
+        </div>
+      )}
     </div>
   );
 }
@@ -145,7 +158,7 @@ function CreateTenantForm({ onCreate }: { onCreate: (name: string, slug: string)
   const [name, setName] = useState("");
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-8">
+    <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8">
       <h1 className="font-ui text-xl font-semibold text-ink">Set up your organisation</h1>
       <form
         onSubmit={(event) => {
