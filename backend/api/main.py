@@ -20,27 +20,37 @@ from api.routes import (
 )
 from services.composition.provider import CompositionError
 from services.diff_note.provider import DiffNoteError
+from services.exports.pdf import PdfRenderingError
 from services.extraction.provider import ExtractionError
 from services.predicate_assist.provider import PredicateAssistError
 
 app = FastAPI(title="Provision API", version="0.1.0")
 
 
-async def _ai_provider_error_handler(_request: Request, exc: Exception) -> JSONResponse:
-    """A route's own try/except (see api/routes/admin_instruments.py,
-    memos.py) catches these when the AI provider call itself fails —
-    this handler is the backstop for the case that try/except can't
-    reach: the provider raising during FastAPI's dependency resolution
-    (e.g. AnthropicExtractionProvider.__init__ raising
+async def _external_dependency_error_handler(_request: Request, exc: Exception) -> JSONResponse:
+    """Backstop for errors raised by something this service depends on
+    but doesn't control — an AI provider (a route's own try/except, see
+    api/routes/admin_instruments.py, memos.py, catches these when the
+    call itself fails; this handler is for the case that try/except
+    can't reach: the provider raising during FastAPI's dependency
+    resolution, e.g. AnthropicExtractionProvider.__init__ raising
     ExtractionNotConfiguredError because PROVISION_ANTHROPIC_API_KEY
-    isn't set), which happens before any route body — and its
-    try/except — ever runs. Without this, a missing or invalid key
-    surfaces as an opaque 500 instead of a clear, actionable message."""
+    isn't set, before any route body — or try/except — ever runs) or
+    headless Chromium for PDF export (PdfRenderingError, raised when the
+    browser binary isn't installed in this environment). Without this,
+    either surfaces as an opaque 500 instead of a clear, actionable
+    message."""
     return JSONResponse(status_code=status.HTTP_502_BAD_GATEWAY, content={"detail": str(exc)})
 
 
-for _error_cls in (ExtractionError, CompositionError, PredicateAssistError, DiffNoteError):
-    app.add_exception_handler(_error_cls, _ai_provider_error_handler)
+for _error_cls in (
+    ExtractionError,
+    CompositionError,
+    PredicateAssistError,
+    DiffNoteError,
+    PdfRenderingError,
+):
+    app.add_exception_handler(_error_cls, _external_dependency_error_handler)
 
 app.add_middleware(
     CORSMiddleware,

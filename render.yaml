@@ -18,7 +18,13 @@ services:
     runtime: python
     plan: free
     rootDir: backend
-    buildCommand: pip install poetry && poetry install --no-root
+    # `--with-deps` also installs the OS-level shared libraries Chromium
+    # needs to launch (nss, atk, etc.) — without it the binary downloads
+    # but fails to start. Matches .github/workflows/ci.yml's backend job,
+    # which needs the same browser for the same PDF-export tests.
+    buildCommand: >-
+      pip install poetry && poetry install --no-root &&
+      poetry run playwright install --with-deps chromium
     startCommand: >-
       poetry run python -m scripts.ensure_extensions &&
       poetry run alembic upgrade head &&
