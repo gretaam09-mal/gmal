@@ -167,6 +167,14 @@ def test_full_memo_lifecycle_over_http(
     assert obligation_entry["impact_likely"] == str(5000 + 40 * 500)
     assert obligation_entry["what_it_requires"] == "Appoint a data protection officer."
 
+    # The frontend renders instrument_title in the Composition-of-the-
+    # range legend and obligation_summary as the Obligations heading —
+    # they must actually be different strings in the real API response,
+    # not just in a hand-written frontend fixture, or the two sections
+    # repeat the same sentence on screen (the reported live-app bug).
+    assert obligation_entry["instrument_title"] == "Test Data Protection Act"
+    assert obligation_entry["instrument_title"] != obligation_entry["obligation_summary"]
+
     # A number in the memo traces to its clauses/figures in a handful of
     # clicks: get memo -> read obligation section -> see clause_refs.
     assert obligation_entry["clause_refs"]

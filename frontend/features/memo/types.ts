@@ -7,6 +7,7 @@ export interface PhaseEntry {
 
 export interface MemoObligation {
   predicate_id: string;
+  instrument_title: string;
   obligation_summary: string;
   clause_refs: string[];
   rationale: string;

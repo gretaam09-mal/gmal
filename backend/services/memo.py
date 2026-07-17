@@ -387,6 +387,7 @@ def _build_numeric_content(
         obligations.append(
             {
                 "predicate_id": predicate_id,
+                "instrument_title": ctx.instrument.title,
                 "obligation_summary": ctx.obligation.summary,
                 "clause_refs": [ctx.clause_ref],
                 "rationale": ctx.item.rationale,
