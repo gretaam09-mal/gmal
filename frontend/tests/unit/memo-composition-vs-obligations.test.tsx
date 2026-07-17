@@ -31,6 +31,10 @@ const obligation: MemoObligation = {
   present_value: "24000.00",
   what_it_requires: "The firm must appoint a suitably qualified DPO.",
   why_it_applies: "The target processes personal data at scale.",
+  cost_source: "expert_template",
+  cost_rationale: null,
+  cost_assumptions: null,
+  cost_drivers: null,
 };
 
 describe("Composition of the range vs. Obligations section", () => {

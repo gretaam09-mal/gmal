@@ -1,9 +1,10 @@
 from decimal import Decimal
 
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from engine.impact.range import RangeResult, compute_range
+from engine.impact.range import RangeResult, compute_range, range_from_estimate
 
 # --- Example-based: the range shape is the spec, pin it exactly. ---
 
@@ -38,6 +39,26 @@ def test_compute_range_is_unavailable_when_a_driver_is_missing():
         currency="GBP",
         missing_driver_keys=("scale.employee_count",),
     )
+
+
+# --- range_from_estimate: the AI-cost-estimate entry point (CONVENTIONS.md
+# rule 1's narrow exception) — no formula, the three figures are given
+# directly, but the resulting RangeResult is otherwise indistinguishable
+# from a template-derived one to every downstream engine/ function. ---
+
+
+def test_range_from_estimate_builds_a_range_result_from_given_figures():
+    result = range_from_estimate(
+        best=Decimal("15000"), likely=Decimal("25000"), worst=Decimal("40000")
+    )
+    assert result == RangeResult(
+        best=Decimal("15000"), likely=Decimal("25000"), worst=Decimal("40000"), currency="GBP"
+    )
+
+
+def test_range_from_estimate_rejects_an_out_of_order_triple():
+    with pytest.raises(ValueError, match="must hold"):
+        range_from_estimate(best=Decimal("40000"), likely=Decimal("25000"), worst=Decimal("15000"))
 
 
 # --- Property-based: invariants that must hold for any formula/facts. ---

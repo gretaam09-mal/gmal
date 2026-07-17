@@ -15,6 +15,7 @@ from services.companies_house import CompaniesHouseClient
 
 if TYPE_CHECKING:
     from services.composition.provider import CompositionProvider
+    from services.cost_estimate.provider import CostEstimateProvider
     from services.diff_note.provider import DiffNoteProvider
     from services.extraction.provider import ExtractionProvider
     from services.predicate_assist.provider import PredicateAssistProvider
@@ -203,6 +204,18 @@ def get_diff_note_provider() -> "DiffNoteProvider":
     from services.diff_note import AnthropicDiffNoteProvider
 
     return AnthropicDiffNoteProvider()
+
+
+def get_cost_estimate_provider() -> "CostEstimateProvider":
+    """See get_extraction_provider — same fail-closed-without-a-key shape,
+    for P-COST-ESTIMATE (services/cost_estimate.py). CONVENTIONS.md rule
+    1's narrow cost-estimation exception: the one AI call allowed to
+    originate a number a user sees, so it fails closed exactly like every
+    other AI provider here rather than silently falling back to
+    inventing a figure or dropping the obligation's cost."""
+    from services.cost_estimate import AnthropicCostEstimateProvider
+
+    return AnthropicCostEstimateProvider()
 
 
 def require_staff(current_user: User = Depends(get_current_user)) -> User:

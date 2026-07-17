@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from api.deps import (
     get_composition_provider,
+    get_cost_estimate_provider,
     get_current_user,
     get_diff_note_provider,
     get_workspace_db,
@@ -24,6 +25,7 @@ from db.models import Analysis, Membership, Role, User
 from services.analyses import list_analysis_item_views, run_analysis
 from services.audit import record_audit_event
 from services.composition.provider import CompositionError
+from services.cost_estimate.provider import CostEstimateError
 from services.diff_note.provider import DiffNoteError
 from services.entity_profile import get_current_profile
 from services.memo import find_memo_needing_resync, sync_memo_to_latest_analysis
@@ -117,10 +119,11 @@ async def create_analysis(
     # require an Anthropic key just to run an analysis. Only a genuine
     # re-run (a memo already exists and still points at a superseded
     # analysis) resolves the AI providers it needs to recompute that
-    # memo — get_composition_provider/get_diff_note_provider fail closed
-    # without a configured key, so those are looked up here rather than
-    # via an unconditional Depends that would run (and could fail) on
-    # every analysis, not just re-runs with a memo to sync.
+    # memo — get_composition_provider/get_cost_estimate_provider/
+    # get_diff_note_provider fail closed without a configured key, so
+    # those are looked up here rather than via an unconditional Depends
+    # that would run (and could fail) on every analysis, not just
+    # re-runs with a memo to sync.
     stale_memo = find_memo_needing_resync(
         session, workspace_id=membership.workspace_id, new_analysis_id=analysis.id
     )
@@ -128,6 +131,9 @@ async def create_analysis(
         composition_provider = request.app.dependency_overrides.get(
             get_composition_provider, get_composition_provider
         )()
+        cost_estimate_provider_factory = request.app.dependency_overrides.get(
+            get_cost_estimate_provider, get_cost_estimate_provider
+        )
         diff_note_provider_factory = request.app.dependency_overrides.get(
             get_diff_note_provider, get_diff_note_provider
         )
@@ -137,9 +143,12 @@ async def create_analysis(
                 memo=stale_memo,
                 new_analysis=analysis,
                 composition_provider=composition_provider,
+                cost_estimate_provider=cost_estimate_provider_factory,
                 diff_note_provider=diff_note_provider_factory,
             )
         except CompositionError as exc:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+        except CostEstimateError as exc:
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
         except DiffNoteError as exc:
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc

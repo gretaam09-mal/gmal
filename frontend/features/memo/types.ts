@@ -5,6 +5,13 @@ export interface PhaseEntry {
   amount: string;
 }
 
+export interface CostDriver {
+  driver: string;
+  detail: string;
+}
+
+export type CostSource = "expert_template" | "ai_estimate";
+
 export interface MemoObligation {
   predicate_id: string;
   instrument_title: string;
@@ -19,6 +26,12 @@ export interface MemoObligation {
   present_value: string;
   what_it_requires: string;
   why_it_applies: string;
+  cost_source: CostSource;
+  /** Only set when cost_source is "ai_estimate" — see CONVENTIONS.md
+   * rule 1's narrow cost-estimation exception. */
+  cost_rationale: string | null;
+  cost_assumptions: string[] | null;
+  cost_drivers: CostDriver[] | null;
 }
 
 export interface ExcludedObligation {

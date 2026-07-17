@@ -45,6 +45,7 @@ from db.models import (
 )
 from db.models.enums import AnalysisItemOutcome, MemoStatus, ReviewDecision
 from engine.completeness.calculator import FieldState, compute_completeness
+from engine.completeness.catalog import FIELD_BY_KEY
 from engine.confidence import SCENARIO_SOURCE_SCORES, compute_confidence_grade
 from engine.diff import Change, compute_assumption_diff
 from engine.impact import (
@@ -55,11 +56,15 @@ from engine.impact import (
     compute_weighted_range,
     discount_to_present_value,
     phase_schedule,
+    range_from_estimate,
 )
 from services.analyses import build_facts
 from services.composition.context import MemoComposeContext, ObligationComposeInput
 from services.composition.provider import CompositionProvider
 from services.composition.schemas import ComposedMemoProse
+from services.cost_estimate.context import CostEstimateContext, ProfileFact
+from services.cost_estimate.provider import CostEstimateProvider
+from services.cost_estimate.schemas import CostEstimate
 from services.diff_note.provider import DiffNoteProvider
 from services.diff_note.schemas import ComposedDiffNote
 from services.entity_profile import get_profile_fields
@@ -158,11 +163,36 @@ def _add_assumptions(
 # --- Assumption register -----------------------------------------------------
 
 
+def _company_facts(facts: dict[str, Any]) -> tuple[ProfileFact, ...]:
+    """Every recorded profile fact, labelled from the field catalog where
+    known — the "size, revenue, sector, and complexity" P-COST-ESTIMATE
+    scales its estimate to. Passing the whole profile (not a hand-picked
+    subset) means new profile fields feed the estimate automatically as
+    the catalog grows, with no cost_estimate.py change required."""
+    return tuple(
+        ProfileFact(label=FIELD_BY_KEY[key].label if key in FIELD_BY_KEY else key, value=str(value))
+        for key, value in facts.items()
+        if value is not None
+    )
+
+
+def _cost_estimate_value(estimate: CostEstimate) -> dict[str, Any]:
+    return {
+        "best": str(estimate.best),
+        "likely": str(estimate.likely),
+        "worst": str(estimate.worst),
+        "rationale": estimate.rationale,
+        "assumptions": list(estimate.assumptions),
+        "cost_drivers": [{"driver": d.driver, "detail": d.detail} for d in estimate.cost_drivers],
+    }
+
+
 def _build_assumption_specs(
     session: Session,
     analysis: Analysis,
     contexts: list[_ItemContext],
     facts: dict[str, Any],
+    cost_estimate_provider: Callable[[], CostEstimateProvider],
 ) -> list[AssumptionSpec]:
     specs = [
         AssumptionSpec(
@@ -176,11 +206,47 @@ def _build_assumption_specs(
             source="analysis_setting",
         ),
     ]
+    company_facts = _company_facts(facts)
     seen_drivers: set[str] = set()
     for ctx in contexts:
-        if ctx.item.outcome is not AnalysisItemOutcome.BINDS or ctx.cost_template is None:
+        if ctx.item.outcome is not AnalysisItemOutcome.BINDS:
             continue
         predicate_id = str(ctx.predicate.id)
+        if ctx.cost_template is None:
+            # No expert-authored cost template — CONVENTIONS.md rule 1's
+            # narrow cost-estimation exception: ask the model for a
+            # company-specific best/likely/worst estimate instead of
+            # silently dropping this obligation's cost from the memo.
+            # Stored as an Assumption exactly like driver facts/scenario
+            # weights, so a later assumption override on some *other*
+            # obligation reuses this one unchanged rather than re-calling
+            # the model (see override_assumption_and_recompute).
+            #
+            # cost_estimate_provider is a zero-arg factory, not an
+            # instance (same reason as sync_memo_to_latest_analysis's
+            # diff_note_provider): the real provider fails closed without
+            # an Anthropic key, and the overwhelmingly common case is
+            # every binding obligation already has an expert template, so
+            # resolving it eagerly would make ordinary memo creation
+            # require a key it never actually uses.
+            estimate = cost_estimate_provider().estimate(
+                CostEstimateContext(
+                    predicate_id=predicate_id,
+                    obligation_summary=ctx.obligation.summary,
+                    rationale=ctx.item.rationale,
+                    clause_refs=(ctx.clause_ref,),
+                    clause_texts=(ctx.clause_text,),
+                    company_facts=company_facts,
+                )
+            )
+            specs.append(
+                AssumptionSpec(
+                    key=f"ai_cost_estimate:{predicate_id}",
+                    value=_cost_estimate_value(estimate),
+                    source="ai_cost_estimate",
+                )
+            )
+            continue
         for term in ctx.cost_template.formula.get("terms", []):
             driver_key = term["driver"]
             spec_key = f"driver:{predicate_id}:{driver_key}"
@@ -222,15 +288,17 @@ def _build_assumption_specs(
 
 _DriverFacts = dict[str, dict[str, Decimal]]
 _ScenarioWeights = dict[str, dict[str, tuple[Decimal, Decimal]]]
+_AiEstimates = dict[str, dict[str, Any]]
 
 
 def _facts_and_scenarios_from_items(
     items: list[Any],
-) -> tuple[Decimal, Decimal, _DriverFacts, _ScenarioWeights]:
+) -> tuple[Decimal, Decimal, _DriverFacts, _ScenarioWeights, _AiEstimates]:
     discount_rate_pct = Decimal("0")
     fx_rate = Decimal("1")
     driver_facts: _DriverFacts = {}
     scenario_weights: _ScenarioWeights = {}
+    ai_estimates: _AiEstimates = {}
     for item in items:
         if item.key == "discount_rate_pct":
             discount_rate_pct = Decimal(item.value["value"])
@@ -245,7 +313,10 @@ def _facts_and_scenarios_from_items(
                 Decimal(item.value["probability"]),
                 Decimal(item.value.get("magnitude_multiplier", "1")),
             )
-    return discount_rate_pct, fx_rate, driver_facts, scenario_weights
+        elif item.key.startswith("ai_cost_estimate:"):
+            _, predicate_id = item.key.split(":", 1)
+            ai_estimates[predicate_id] = item.value
+    return discount_rate_pct, fx_rate, driver_facts, scenario_weights, ai_estimates
 
 
 # --- Numeric content assembly -------------------------------------------------
@@ -259,14 +330,38 @@ def _compute_obligation_numbers(
     discount_rate_pct: Decimal,
     fx_rate: Decimal,
     analysis_date,
+    ai_estimate: dict[str, Any] | None,
 ) -> dict[str, Any] | None:
-    if ctx.cost_template is None:
+    cost_source = "expert_template"
+    if ctx.cost_template is not None:
+        point_range = compute_range(
+            ctx.cost_template.formula, driver_facts, currency=ctx.cost_template.currency
+        )
+        if point_range.likely is None:
+            return None
+        first_obligation_date = ctx.cost_template.first_obligation_date
+        transition_months = ctx.cost_template.transition_months
+    elif ai_estimate is not None:
+        # CONVENTIONS.md rule 1's narrow cost-estimation exception: no
+        # expert template exists, so the seed best/likely/worst figures
+        # came from P-COST-ESTIMATE instead of a formula — but they still
+        # flow through the exact same engine/impact phasing/PV/scenario-
+        # weighting functions as a template-derived range below. There's
+        # no template to source timing from, so this is phased as a
+        # single lump sum at the analysis date, same as any obligation
+        # with no explicit transition schedule.
+        cost_source = "ai_estimate"
+        point_range = range_from_estimate(
+            best=Decimal(ai_estimate["best"]),
+            likely=Decimal(ai_estimate["likely"]),
+            worst=Decimal(ai_estimate["worst"]),
+            currency="GBP",
+        )
+        first_obligation_date = None
+        transition_months = 0
+    else:
         return None
-    point_range = compute_range(
-        ctx.cost_template.formula, driver_facts, currency=ctx.cost_template.currency
-    )
-    if point_range.likely is None:
-        return None
+
     if ctx.instrument.in_flight and scenario_weights:
         weights = tuple(
             ScenarioWeight(
@@ -286,8 +381,8 @@ def _compute_obligation_numbers(
         final_range = point_range
     entries = phase_schedule(
         final_range.likely,
-        first_obligation_date=ctx.cost_template.first_obligation_date,
-        transition_months=ctx.cost_template.transition_months,
+        first_obligation_date=first_obligation_date,
+        transition_months=transition_months,
         analysis_date=analysis_date,
     )
     present_value = discount_to_present_value(
@@ -300,15 +395,25 @@ def _compute_obligation_numbers(
         "currency": final_range.currency,
         "phased_schedule": entries,
         "present_value": present_value,
+        "cost_source": cost_source,
+        "cost_rationale": ai_estimate["rationale"] if cost_source == "ai_estimate" else None,
+        "cost_assumptions": ai_estimate["assumptions"] if cost_source == "ai_estimate" else None,
+        "cost_drivers": ai_estimate["cost_drivers"] if cost_source == "ai_estimate" else None,
     }
 
 
 def _weakest_maturity_tier(contexts: list[_ItemContext]) -> str:
-    tiers = [
-        ctx.cost_template.maturity_tier
-        for ctx in contexts
-        if ctx.item.outcome is AnalysisItemOutcome.BINDS and ctx.cost_template is not None
-    ]
+    tiers = []
+    for ctx in contexts:
+        if ctx.item.outcome is not AnalysisItemOutcome.BINDS:
+            continue
+        # A binding obligation with no expert CostTemplate is either
+        # AI-estimated or (rarely) entirely uncosted — either way that's
+        # the least mature basis a figure in this memo can have, so it
+        # must not be silently excluded from the confidence calculation
+        # the way it used to be (which let one AI-estimated obligation
+        # sit next to a "quoted" template one without lowering the grade).
+        tiers.append(ctx.cost_template.maturity_tier if ctx.cost_template is not None else "rough")
     if not tiers:
         return "rough"
     return min(tiers, key=lambda tier: _MATURITY_RANK.get(tier, 0))
@@ -348,8 +453,8 @@ def _build_numeric_content(
     contexts: list[_ItemContext],
     assumption_items: list[Any],
 ) -> dict[str, Any]:
-    discount_rate_pct, fx_rate, driver_facts, scenario_weights = _facts_and_scenarios_from_items(
-        assumption_items
+    discount_rate_pct, fx_rate, driver_facts, scenario_weights, ai_estimates = (
+        _facts_and_scenarios_from_items(assumption_items)
     )
     analysis_date = analysis.created_at.date()
 
@@ -377,6 +482,7 @@ def _build_numeric_content(
             discount_rate_pct=discount_rate_pct,
             fx_rate=fx_rate,
             analysis_date=analysis_date,
+            ai_estimate=ai_estimates.get(predicate_id),
         )
         if numbers is None:
             continue
@@ -400,6 +506,10 @@ def _build_numeric_content(
                     for entry in numbers["phased_schedule"]
                 ],
                 "present_value": str(numbers["present_value"]),
+                "cost_source": numbers["cost_source"],
+                "cost_rationale": numbers["cost_rationale"],
+                "cost_assumptions": numbers["cost_assumptions"],
+                "cost_drivers": numbers["cost_drivers"],
                 "what_it_requires": "",
                 "why_it_applies": "",
             }
@@ -547,10 +657,11 @@ def create_memo_from_analysis(
     title: str,
     created_by_user_id: uuid.UUID,
     composition_provider: CompositionProvider,
+    cost_estimate_provider: Callable[[], CostEstimateProvider],
 ) -> Memo:
     contexts = _item_contexts(session, analysis.id)
     facts = build_facts(session, analysis.entity_profile_id)
-    specs = _build_assumption_specs(session, analysis, contexts, facts)
+    specs = _build_assumption_specs(session, analysis, contexts, facts, cost_estimate_provider)
 
     memo = Memo(
         tenant_id=tenant_id,
@@ -751,6 +862,7 @@ def sync_memo_to_latest_analysis(
     memo: Memo,
     new_analysis: Analysis,
     composition_provider: CompositionProvider,
+    cost_estimate_provider: Callable[[], CostEstimateProvider],
     diff_note_provider: Callable[[], DiffNoteProvider],
 ) -> Memo:
     """Makes "re-run analysis" actually re-run the memo too.
@@ -776,6 +888,9 @@ def sync_memo_to_latest_analysis(
     composition_provider it's not needed for the (far more common)
     Draft/In Review regeneration, so resolving it eagerly would make
     every re-run of a Draft memo require a key it never actually uses.
+    cost_estimate_provider is likewise a zero-arg factory — see
+    _build_assumption_specs — only called if some binding obligation
+    genuinely has no expert cost template.
     """
     latest_version = session.execute(
         select(MemoVersion)
@@ -791,7 +906,7 @@ def sync_memo_to_latest_analysis(
 
     contexts = _item_contexts(session, new_analysis.id)
     facts = build_facts(session, new_analysis.entity_profile_id)
-    specs = _build_assumption_specs(session, new_analysis, contexts, facts)
+    specs = _build_assumption_specs(session, new_analysis, contexts, facts, cost_estimate_provider)
     numeric_content = _build_numeric_content(
         session, analysis=new_analysis, contexts=contexts, assumption_items=specs
     )
