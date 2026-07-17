@@ -4,8 +4,11 @@ approved memo, through the sweep, through a human onboarding the new
 instrument version's clause (the existing F3 workbench flow), to a
 fresh memo whose content reflects the updated regulation.
 """
+
 import uuid
 
+from api.deps import get_composition_provider
+from api.main import app
 from db.models import CuratedSource, InstrumentVersion, MemoInputChangeFlag
 from db.session import set_rls_context
 from services.composition.fixture_provider import FixtureCompositionProvider
@@ -123,7 +126,9 @@ class _EchoCompositionProvider:
         )
 
 
-def test_sweep_flag_email_and_rerun_path_end_to_end(client_as, make_user, db_session):
+def test_sweep_flag_email_and_rerun_path_end_to_end(
+    client_as, make_user, db_session, diff_note_provider_fixture
+):
     owner = make_user()
     client = client_as(owner)
     workspace = _create_tenant_and_workspace(client, codename="project-heron")
@@ -240,10 +245,35 @@ def test_sweep_flag_email_and_rerun_path_end_to_end(client_as, make_user, db_ses
     )
     db_session.commit()
 
-    rerun_analysis_resp = client.post(f"/workspaces/{workspace['id']}/analyses", json={})
-    assert rerun_analysis_resp.status_code == 201, rerun_analysis_resp.text
+    # The re-run itself now also auto-syncs the original approved memo
+    # (see services/memo.py::sync_memo_to_latest_analysis) — since it's
+    # approved, that branches a new Draft version rather than mutating
+    # it. _EchoCompositionProvider (not FixtureCompositionProvider)
+    # because the auto-sync's binding-obligation set/order isn't
+    # predictable enough here to pre-register an exact fixture key for.
+    app.dependency_overrides[get_composition_provider] = lambda: _EchoCompositionProvider()
+    try:
+        rerun_analysis_resp = client.post(f"/workspaces/{workspace['id']}/analyses", json={})
+        assert rerun_analysis_resp.status_code == 201, rerun_analysis_resp.text
+    finally:
+        app.dependency_overrides.pop(get_composition_provider, None)
     set_rls_context(db_session, workspace["tenant_id"], workspace["id"])
     rerun_analysis = db_session.get(Analysis, uuid.UUID(rerun_analysis_resp.json()["id"]))
+
+    db_session.refresh(memo_version)
+    synced_versions = (
+        db_session.query(MemoVersion)
+        .filter(MemoVersion.memo_id == memo_version.memo_id)
+        .order_by(MemoVersion.version)
+        .all()
+    )
+    assert len(synced_versions) == 2
+    assert synced_versions[0].id == memo_version.id
+    assert synced_versions[0].status.value == "approved"
+    assert synced_versions[1].status.value == "draft"
+    synced_summaries = {o["obligation_summary"] for o in synced_versions[1].content["obligations"]}
+    assert "Appoint a data protection officer." in synced_summaries
+    assert "Report annually to the board." in synced_summaries
 
     rerun_composition_provider = _EchoCompositionProvider()
     rerun_memo = create_memo_from_analysis(
@@ -255,9 +285,7 @@ def test_sweep_flag_email_and_rerun_path_end_to_end(client_as, make_user, db_ses
         created_by_user_id=owner.id,
         composition_provider=rerun_composition_provider,
     )
-    rerun_version = (
-        db_session.query(MemoVersion).filter(MemoVersion.memo_id == rerun_memo.id).one()
-    )
+    rerun_version = db_session.query(MemoVersion).filter(MemoVersion.memo_id == rerun_memo.id).one()
 
     summaries = {o["obligation_summary"] for o in rerun_version.content["obligations"]}
     assert "Appoint a data protection officer." in summaries

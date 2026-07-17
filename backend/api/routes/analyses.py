@@ -8,16 +8,25 @@ everywhere — see api/routes/profiles.py for the identical shape.
 import uuid
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from api.deps import get_current_user, get_workspace_db, require_role
+from api.deps import (
+    get_composition_provider,
+    get_current_user,
+    get_diff_note_provider,
+    get_workspace_db,
+    require_role,
+)
 from api.schemas import AnalysisCreateRequest, AnalysisItemOut, AnalysisOut, PhaseEntryOut
 from db.models import Analysis, Membership, Role, User
 from services.analyses import list_analysis_item_views, run_analysis
 from services.audit import record_audit_event
+from services.composition.provider import CompositionError
+from services.diff_note.provider import DiffNoteError
 from services.entity_profile import get_current_profile
+from services.memo import find_memo_needing_resync, sync_memo_to_latest_analysis
 
 router = APIRouter(tags=["analyses"])
 
@@ -74,6 +83,7 @@ def _to_out(session: Session, analysis: Analysis) -> AnalysisOut:
     status_code=status.HTTP_201_CREATED,
 )
 async def create_analysis(
+    request: Request,
     body: AnalysisCreateRequest,
     current_user: User = Depends(get_current_user),
     membership: Membership = Depends(require_role(Role.OWNER, Role.ANALYST)),
@@ -101,6 +111,39 @@ async def create_analysis(
         fx_rate=Decimal(str(body.fx_rate)),
         base_currency=body.base_currency,
     )
+
+    # Re-runnability: a workspace's first-ever analysis has no memo yet,
+    # so this is a no-op for the overwhelmingly common case and must not
+    # require an Anthropic key just to run an analysis. Only a genuine
+    # re-run (a memo already exists and still points at a superseded
+    # analysis) resolves the AI providers it needs to recompute that
+    # memo — get_composition_provider/get_diff_note_provider fail closed
+    # without a configured key, so those are looked up here rather than
+    # via an unconditional Depends that would run (and could fail) on
+    # every analysis, not just re-runs with a memo to sync.
+    stale_memo = find_memo_needing_resync(
+        session, workspace_id=membership.workspace_id, new_analysis_id=analysis.id
+    )
+    if stale_memo is not None:
+        composition_provider = request.app.dependency_overrides.get(
+            get_composition_provider, get_composition_provider
+        )()
+        diff_note_provider_factory = request.app.dependency_overrides.get(
+            get_diff_note_provider, get_diff_note_provider
+        )
+        try:
+            sync_memo_to_latest_analysis(
+                session,
+                memo=stale_memo,
+                new_analysis=analysis,
+                composition_provider=composition_provider,
+                diff_note_provider=diff_note_provider_factory,
+            )
+        except CompositionError as exc:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+        except DiffNoteError as exc:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
     record_audit_event(
         session,
         tenant_id=membership.tenant_id,

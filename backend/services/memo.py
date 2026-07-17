@@ -16,9 +16,11 @@ never re-evaluated here. Only the figures downstream of a binding
 obligation's cost template (driver facts, discount rate, FX rate,
 scenario probabilities) are overridable and recomputed.
 """
+
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
@@ -128,6 +130,29 @@ def _memo_version_assumptions(session: Session, memo_version_id: uuid.UUID) -> l
             select(Assumption).where(Assumption.memo_version_id == memo_version_id)
         ).scalars()
     )
+
+
+def _add_assumptions(
+    session: Session,
+    *,
+    tenant_id: uuid.UUID,
+    workspace_id: uuid.UUID,
+    memo_version_id: uuid.UUID,
+    specs: list[AssumptionSpec],
+) -> None:
+    for spec in specs:
+        session.add(
+            Assumption(
+                tenant_id=tenant_id,
+                workspace_id=workspace_id,
+                memo_version_id=memo_version_id,
+                key=spec.key,
+                value=spec.value,
+                source=spec.source,
+                note=spec.note,
+            )
+        )
+    session.flush()
 
 
 # --- Assumption register -----------------------------------------------------
@@ -556,19 +581,13 @@ def create_memo_from_analysis(
     session.add(memo_version)
     session.flush()
 
-    for spec in specs:
-        session.add(
-            Assumption(
-                tenant_id=tenant_id,
-                workspace_id=workspace_id,
-                memo_version_id=memo_version.id,
-                key=spec.key,
-                value=spec.value,
-                source=spec.source,
-                note=spec.note,
-            )
-        )
-    session.flush()
+    _add_assumptions(
+        session,
+        tenant_id=tenant_id,
+        workspace_id=workspace_id,
+        memo_version_id=memo_version.id,
+        specs=specs,
+    )
     return memo
 
 
@@ -638,9 +657,7 @@ def approve_memo(
     panel_firm: str | None = None,
 ) -> None:
     if memo_version.status != MemoStatus.IN_REVIEW:
-        raise MemoStateError(
-            f"Cannot approve a memo version in status {memo_version.status.value}"
-        )
+        raise MemoStateError(f"Cannot approve a memo version in status {memo_version.status.value}")
     memo_version.status = MemoStatus.APPROVED
     memo_version.approved_at = datetime.now(UTC)
     memo_version.approved_by_user_id = approved_by_user_id
@@ -702,3 +719,128 @@ def create_new_version_from_approved(
         )
     session.flush()
     return new_version
+
+
+def find_memo_needing_resync(
+    session: Session, *, workspace_id: uuid.UUID, new_analysis_id: uuid.UUID
+) -> Memo | None:
+    """The workspace's memo (if any) that still points at a superseded
+    analysis — i.e. what sync_memo_to_latest_analysis would act on. Split
+    out from that function so a caller (api/routes/analyses.py) can
+    check, with no AI provider involved, whether a re-run's memo-sync
+    will do anything at all before paying the cost of resolving one:
+    the overwhelmingly common case is a workspace's very first analysis,
+    which has no memo yet and must not require an Anthropic key just to
+    run.
+    """
+    memo = session.execute(
+        select(Memo)
+        .where(Memo.workspace_id == workspace_id)
+        .order_by(Memo.created_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if memo is None or memo.analysis_id == new_analysis_id:
+        return None
+    return memo
+
+
+def sync_memo_to_latest_analysis(
+    session: Session,
+    *,
+    memo: Memo,
+    new_analysis: Analysis,
+    composition_provider: CompositionProvider,
+    diff_note_provider: Callable[[], DiffNoteProvider],
+) -> Memo:
+    """Makes "re-run analysis" actually re-run the memo too.
+
+    Memo.analysis_id was set once at memo-creation time and never
+    followed a later re-run: a fresh Analysis (e.g. after a profile
+    edit) created new AnalysisItem rows, but no code path re-pointed the
+    memo at them or recomputed its content, so the memo kept showing the
+    superseded analysis's numbers indefinitely. `memo` must be one
+    find_memo_needing_resync returned (i.e. it still points at a
+    superseded analysis) — this re-points it at `new_analysis` and
+    recomputes its latest version's content from it: a Draft/In Review
+    version is regenerated in place (it's still mutable); an Approved
+    version is left untouched per CONVENTIONS.md rule 2 and instead gets
+    a new Draft version carrying the recomputed numbers and a diff note
+    against the version it supersedes, mirroring
+    override_assumption_and_recompute's snapshot -> recompute -> diff
+    pattern but at the analysis level.
+
+    diff_note_provider is a zero-arg factory, not an instance, and is
+    only called in the Approved branch below: like composition_provider,
+    the real one fails closed without an Anthropic key, but unlike
+    composition_provider it's not needed for the (far more common)
+    Draft/In Review regeneration, so resolving it eagerly would make
+    every re-run of a Draft memo require a key it never actually uses.
+    """
+    latest_version = session.execute(
+        select(MemoVersion)
+        .where(MemoVersion.memo_id == memo.id)
+        .order_by(MemoVersion.version.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if latest_version is None:
+        return memo
+
+    memo.analysis_id = new_analysis.id
+    session.flush()
+
+    contexts = _item_contexts(session, new_analysis.id)
+    facts = build_facts(session, new_analysis.entity_profile_id)
+    specs = _build_assumption_specs(session, new_analysis, contexts, facts)
+    numeric_content = _build_numeric_content(
+        session, analysis=new_analysis, contexts=contexts, assumption_items=specs
+    )
+    compose_context = _compose_context(contexts, numeric_content)
+    prose = composition_provider.compose(compose_context)
+    content = _merge_prose(numeric_content, prose)
+
+    if latest_version.status != MemoStatus.APPROVED:
+        for existing in _memo_version_assumptions(session, latest_version.id):
+            session.delete(existing)
+        session.flush()
+
+        latest_version.content = content
+        latest_version.confidence_grade = content["confidence_grade"]
+        session.flush()
+
+        _add_assumptions(
+            session,
+            tenant_id=latest_version.tenant_id,
+            workspace_id=latest_version.workspace_id,
+            memo_version_id=latest_version.id,
+            specs=specs,
+        )
+        return memo
+
+    old_snapshot = _numeric_snapshot(latest_version.content)
+    new_snapshot = _numeric_snapshot(content)
+    changes = compute_assumption_diff(old_snapshot, new_snapshot)
+    diff_note = diff_note_provider().summarise(changes)
+    content["change_note"] = diff_note.change_note
+    content["superseded_version"] = latest_version.version
+
+    new_version = MemoVersion(
+        tenant_id=latest_version.tenant_id,
+        workspace_id=latest_version.workspace_id,
+        memo_id=memo.id,
+        version=latest_version.version + 1,
+        content=content,
+        status=MemoStatus.DRAFT,
+        confidence_grade=content["confidence_grade"],
+        created_by_user_id=latest_version.created_by_user_id,
+    )
+    session.add(new_version)
+    session.flush()
+
+    _add_assumptions(
+        session,
+        tenant_id=new_version.tenant_id,
+        workspace_id=new_version.workspace_id,
+        memo_version_id=new_version.id,
+        specs=specs,
+    )
+    return memo
