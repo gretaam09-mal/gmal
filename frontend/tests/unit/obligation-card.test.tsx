@@ -7,6 +7,7 @@ import type { MemoObligation } from "@/features/memo/types";
 function makeObligation(overrides: Partial<MemoObligation> = {}): MemoObligation {
   return {
     predicate_id: "pred-1",
+    instrument_title: "Test Data Protection Act",
     obligation_summary: "Appoint a data protection officer.",
     clause_refs: ["s.1"],
     rationale: "Binds: processes personal data.",
