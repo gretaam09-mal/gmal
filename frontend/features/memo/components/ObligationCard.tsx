@@ -22,12 +22,9 @@ export function ObligationCard({ obligation }: { obligation: MemoObligation }) {
         onClick={() => setExpanded((value) => !value)}
         className="flex items-center justify-between text-left"
       >
-        <div className="flex flex-col">
-          <span className="font-ui text-sm font-medium text-ink">
-            {obligation.obligation_summary}
-          </span>
-          <span className="font-document text-xs text-ink/60">{obligation.what_it_requires}</span>
-        </div>
+        <span className="font-ui text-sm font-medium text-ink">
+          {obligation.obligation_summary}
+        </span>
         <span className="font-ui text-xs text-ink/50">{expanded ? "Hide detail" : "Detail"}</span>
       </button>
 
@@ -40,6 +37,13 @@ export function ObligationCard({ obligation }: { obligation: MemoObligation }) {
 
       {expanded ? (
         <div className="flex flex-col gap-3 rounded-md bg-ink/5 p-3">
+          <div>
+            <h4 className="font-ui text-xs font-medium uppercase tracking-wide text-ink/50">
+              What it requires
+            </h4>
+            <p className="font-document text-sm text-ink/80">{obligation.what_it_requires}</p>
+          </div>
+
           <div>
             <h4 className="font-ui text-xs font-medium uppercase tracking-wide text-ink/50">
               Why it applies

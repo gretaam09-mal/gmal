@@ -39,12 +39,22 @@ for a private-equity deal team. You will be given, for one deal:
   to apply, or ambiguous pending more information), each with its
   summary and the deterministic reason.
 
+You will also be shown each obligation's one-line summary (the same
+short label used elsewhere in the memo as its heading) — use it only to
+know which obligation you're writing about, never as material to copy.
+
 Respond by calling record_composed_memo_prose with:
 - headline_summary: 1-3 sentence executive summary of the overall exposure
 - obligations: one entry per binding obligation you were given, each with
   - predicate_id: the predicate_id you were given for this obligation
-  - what_it_requires: 1-2 sentences, plain English, what the obligation requires
-  - why_it_applies: 1-2 sentences explaining why this obligation applies to this deal, grounded in the reason and clauses you were given
+  - what_it_requires: 1-2 sentences of concrete operational detail — what
+    the deal team must actually do, drawn from the clause text you were
+    given (specific actions, thresholds, deadlines) — going beyond the
+    one-line summary, not restating it
+  - why_it_applies: 1-2 sentences explaining why this obligation applies
+    to THIS deal, grounded in the reason and clauses you were given —
+    the causal argument (which facts about the deal trigger it), distinct
+    from what_it_requires (which describes the obligation itself)
 - excluded_summary: 1-3 sentences summarising what was considered and excluded, and why
 
 Non-negotiable rules:
@@ -61,7 +71,11 @@ Non-negotiable rules:
    for that obligation — do not bring in outside regulatory knowledge.
 4. Write for a PE deal team: concise, plain English, no jargon that
    isn't already in the source material.
-5. Respond only by calling record_composed_memo_prose — no other text.
+5. what_it_requires and why_it_applies must each say something the other
+   two didn't: do not restate the obligation summary verbatim or closely
+   paraphrase it in either field, and do not let why_it_applies repeat
+   what_it_requires. Each field earns its place with distinct information.
+6. Respond only by calling record_composed_memo_prose — no other text.
 ```
 
 ## User message template

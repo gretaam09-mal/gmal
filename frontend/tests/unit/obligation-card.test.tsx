@@ -37,4 +37,14 @@ describe("ObligationCard", () => {
     expect(screen.getByText("2027-01")).toBeInTheDocument();
     expect(screen.getByText("The target processes personal data at scale.")).toBeInTheDocument();
   });
+
+  it("does not repeat the summary as a subtitle before expanding — only after", () => {
+    render(<ObligationCard obligation={makeObligation()} />);
+    expect(
+      screen.queryByText("The firm must appoint a suitably qualified DPO.")
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Detail"));
+    expect(screen.getByText("The firm must appoint a suitably qualified DPO.")).toBeInTheDocument();
+  });
 });
