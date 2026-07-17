@@ -17,6 +17,32 @@ write narrative text around a figure the engine already produced, but it
 never performs the arithmetic itself. If a number appears in a memo, there
 must be an `engine/` call that produced it and a test that pins it.
 
+**Narrow exception — AI cost estimation only.** When a binding obligation
+has no expert-authored `CostTemplate`, `services/cost_estimate` may ask an
+LLM to produce a best/likely/worst GBP figure and a rationale, scaled to
+the specific company's profile (P-COST-ESTIMATE — see
+`ai/prompts/P-COST-ESTIMATE.v1.md`). This is the **one** place in the
+codebase an LLM is allowed to originate a number a user sees — every other
+prompt (P-COMPOSE, P-DIFF-NOTE, P-PREDICATE-ASSIST) must reuse a figure
+`engine/` already produced and never invents its own. The exception does
+not widen the rule anywhere else, and it comes with its own guardrails:
+
+- An expert `CostTemplate`, once attached, always overrides the AI
+  estimate — the AI number is a fallback for when no template exists yet,
+  never a competing source of truth.
+- Every AI-estimated figure is labelled in the memo as an **AI-generated
+  INDICATIVE estimate** and carries a `cost_source` field
+  (`expert_template` vs `ai_estimate`) — a reader (and any downstream
+  code) can always tell which figures are engine-verified and which are
+  the model's own estimate.
+- Everything *downstream* of the estimate — phasing, present-value
+  discounting, headline aggregation, the diff engine — still runs through
+  the same deterministic `engine/impact`/`engine/diff` functions as
+  template-sourced figures. Only the seed best/likely/worst numbers may
+  originate from the model instead of a formula; nothing about how those
+  three numbers are then phased, discounted, or summed is allowed to skip
+  `engine/`.
+
 ## 2. Approved records are immutable
 
 Once a memo, exposure computation, or review decision is approved, its

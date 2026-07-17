@@ -19,6 +19,7 @@ from api.routes import (
     workspaces,
 )
 from services.composition.provider import CompositionError
+from services.cost_estimate.provider import CostEstimateError
 from services.diff_note.provider import DiffNoteError
 from services.exports.pdf import PdfRenderingError
 from services.extraction.provider import ExtractionError
@@ -30,8 +31,9 @@ app = FastAPI(title="Provision API", version="0.1.0")
 async def _external_dependency_error_handler(_request: Request, exc: Exception) -> JSONResponse:
     """Backstop for errors raised by something this service depends on
     but doesn't control — an AI provider (a route's own try/except, see
-    api/routes/admin_instruments.py, memos.py, catches these when the
-    call itself fails; this handler is for the case that try/except
+    api/routes/admin_instruments.py, memos.py, analyses.py, catches
+    these when the call itself fails, including P-COST-ESTIMATE's
+    CostEstimateError; this handler is for the case that try/except
     can't reach: the provider raising during FastAPI's dependency
     resolution, e.g. AnthropicExtractionProvider.__init__ raising
     ExtractionNotConfiguredError because PROVISION_ANTHROPIC_API_KEY
@@ -46,6 +48,7 @@ async def _external_dependency_error_handler(_request: Request, exc: Exception) 
 for _error_cls in (
     ExtractionError,
     CompositionError,
+    CostEstimateError,
     PredicateAssistError,
     DiffNoteError,
     PdfRenderingError,

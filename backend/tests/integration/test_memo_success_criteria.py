@@ -26,6 +26,7 @@ from db.models import Analysis, Assumption, MemoVersion
 from db.session import set_rls_context
 from services.composition.fixture_provider import FixtureCompositionProvider
 from services.composition.schemas import ComposedMemoProse
+from services.cost_estimate.fixture_provider import FixtureCostEstimateProvider
 from services.diff_note.schemas import ComposedDiffNote
 from services.diff_note.validator import validate_diff_note
 from services.extraction import ExtractedObligation, FixtureExtractionProvider
@@ -181,6 +182,7 @@ def _setup_memo(client_as, make_user, db_session):
         title="Project Falcon — Impact Memo",
         created_by_user_id=owner.id,
         composition_provider=composition_provider,
+        cost_estimate_provider=lambda: FixtureCostEstimateProvider(),
     )
     db_session.commit()
     return workspace, owner, predicate, memo

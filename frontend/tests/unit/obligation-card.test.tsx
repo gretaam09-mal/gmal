@@ -19,6 +19,10 @@ function makeObligation(overrides: Partial<MemoObligation> = {}): MemoObligation
     present_value: "24000.00",
     what_it_requires: "The firm must appoint a suitably qualified DPO.",
     why_it_applies: "The target processes personal data at scale.",
+    cost_source: "expert_template",
+    cost_rationale: null,
+    cost_assumptions: null,
+    cost_drivers: null,
     ...overrides,
   };
 }
@@ -47,5 +51,35 @@ describe("ObligationCard", () => {
 
     fireEvent.click(screen.getByText("Detail"));
     expect(screen.getByText("The firm must appoint a suitably qualified DPO.")).toBeInTheDocument();
+  });
+
+  it("shows the AI-generated INDICATIVE estimate label, even collapsed, when cost_source is ai_estimate", () => {
+    render(
+      <ObligationCard
+        obligation={makeObligation({
+          cost_source: "ai_estimate",
+          cost_rationale: "Scaled a headcount-based staffing driver to 500 employees.",
+          cost_assumptions: ["Assumes no existing DPO in post."],
+          cost_drivers: [{ driver: "External legal advice", detail: "Drafting an appointment letter." }],
+        })}
+      />
+    );
+
+    expect(screen.getByText("AI-generated INDICATIVE estimate")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Scaled a headcount-based staffing driver to 500 employees.")
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Detail"));
+    expect(
+      screen.getByText("Scaled a headcount-based staffing driver to 500 employees.")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Assumes: Assumes no existing DPO in post.")).toBeInTheDocument();
+    expect(screen.getByText(/External legal advice:/)).toBeInTheDocument();
+  });
+
+  it("does not show the AI-estimate label for an expert-template cost source", () => {
+    render(<ObligationCard obligation={makeObligation({ cost_source: "expert_template" })} />);
+    expect(screen.queryByText("AI-generated INDICATIVE estimate")).not.toBeInTheDocument();
   });
 });

@@ -114,6 +114,22 @@ def composition_provider_fixture():
 
 
 @pytest.fixture
+def cost_estimate_provider_fixture():
+    """Overrides get_cost_estimate_provider with an explicitly-registered
+    FixtureCostEstimateProvider — no route test in this repo ever calls
+    the real P-COST-ESTIMATE model. Only exercised by tests where a
+    binding obligation deliberately has no expert CostTemplate; most
+    memo tests never touch this since they attach one."""
+    from api.deps import get_cost_estimate_provider
+    from services.cost_estimate.fixture_provider import FixtureCostEstimateProvider
+
+    provider = FixtureCostEstimateProvider()
+    app.dependency_overrides[get_cost_estimate_provider] = lambda: provider
+    yield provider
+    app.dependency_overrides.pop(get_cost_estimate_provider, None)
+
+
+@pytest.fixture
 def diff_note_provider_fixture():
     """Overrides get_diff_note_provider with a deterministic stand-in that
     mechanically renders a note from the Change tuple it's given (always
