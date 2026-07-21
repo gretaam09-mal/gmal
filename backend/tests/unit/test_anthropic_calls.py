@@ -143,11 +143,20 @@ def test_create_tool_message_returns_the_tool_input_in_one_call():
     assert len(client.messages.calls) == 1
     call = client.messages.calls[0]
     assert call["messages"] == [{"role": "user", "content": "hi"}]
+    # Default (strict=True): the API is asked to *guarantee* tool_use.input
+    # validates against input_schema exactly, not just guided toward it —
+    # see the strict-tool-use tests below for why this is the actual fix
+    # for the P-COMPOSE {"prose": {...}} bug.
     assert call["tools"] == [
         {
             "name": "my_tool",
             "description": "records the thing",
-            "input_schema": {"type": "object", "properties": {"a": {"type": "integer"}}},
+            "input_schema": {
+                "type": "object",
+                "properties": {"a": {"type": "integer"}},
+                "additionalProperties": False,
+            },
+            "strict": True,
         }
     ]
     assert call["tool_choice"] == {"type": "tool", "name": "my_tool"}
@@ -194,3 +203,68 @@ def test_create_tool_message_ignores_a_tool_use_block_for_a_different_tool():
         _call_tool_message(client)
 
     assert len(client.messages.calls) == 2
+
+
+# --- strict tool use (root cause of the P-COMPOSE {"prose": {...}} bug) -----
+
+
+def test_strict_mode_sets_additional_properties_false_at_every_nested_level():
+    """The actual bug: a schema that only constrained its top-level shape
+    let the model answer {"prose": {inner}} and Anthropic's plain
+    (non-strict) tool use accepted it — the mismatch only surfaced later as
+    a Pydantic ValidationError. additionalProperties: false has to be set
+    on every object in the schema, not just the top one, including objects
+    reached through $defs and array items, or a nested wrapper could still
+    slip through one level down."""
+    schema = {
+        "type": "object",
+        "properties": {
+            "headline": {"type": "string", "minLength": 1, "maxLength": 100},
+            "items": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"$ref": "#/$defs/Item"},
+            },
+        },
+        "required": ["headline", "items"],
+        "$defs": {
+            "Item": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "score": {"type": "integer", "minimum": 0},
+                },
+                "required": ["id", "score"],
+            }
+        },
+    }
+    client = _SequencedClient([[_ToolUseBlock("my_tool", {"headline": "h", "items": []})]])
+
+    _call_tool_message(client, input_schema=schema)
+
+    sent_schema = client.messages.calls[0]["tools"][0]["input_schema"]
+    assert sent_schema["additionalProperties"] is False
+    assert sent_schema["$defs"]["Item"]["additionalProperties"] is False
+    # Constraints Anthropic's strict tool use doesn't support are stripped
+    # from the wire request — they're still enforced afterwards by the
+    # caller's own Model.model_validate(data), so nothing is weakened.
+    assert "minLength" not in sent_schema["properties"]["headline"]
+    assert "maxLength" not in sent_schema["properties"]["headline"]
+    assert "minItems" not in sent_schema["properties"]["items"]
+    assert "minimum" not in sent_schema["$defs"]["Item"]["properties"]["score"]
+
+
+def test_strict_false_opts_out_and_leaves_the_schema_untouched():
+    """services/predicate_assist opts out: its expression field is a
+    deliberately open dict (the predicate DSL has no fixed shape), and
+    strict mode's additionalProperties:false-on-every-object rule would
+    collapse it to {}. strict=False preserves the old schema-guided-but-
+    not-enforced behaviour for that one caller."""
+    schema = {"type": "object", "properties": {"expression": {"type": "object"}}}
+    client = _SequencedClient([[_ToolUseBlock("my_tool", {"expression": {"a": 1}})]])
+
+    _call_tool_message(client, input_schema=schema, strict=False)
+
+    tool = client.messages.calls[0]["tools"][0]
+    assert "strict" not in tool
+    assert tool["input_schema"] == schema

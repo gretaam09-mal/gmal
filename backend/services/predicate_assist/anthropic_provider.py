@@ -75,6 +75,14 @@ class AnthropicPredicateAssistProvider:
             tool_name=_TOOL_NAME,
             tool_description=_TOOL_DESCRIPTION,
             input_schema=DraftedPredicate.model_json_schema(),
+            # DraftedPredicate.expression is deliberately an open dict — the
+            # predicate DSL tree has no fixed shape (see engine/predicates/dsl.py)
+            # — so it can't be made additionalProperties:false like every other
+            # schema in this codebase without collapsing it to {}. Anthropic's
+            # strict tool use requires additionalProperties:false on every
+            # object, with no exception, so strict mode isn't usable for this
+            # one call; _must_be_valid_dsl below is what actually guards its shape.
+            strict=False,
         )
         try:
             return DraftedPredicate.model_validate(data)
