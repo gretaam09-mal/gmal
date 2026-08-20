@@ -22,6 +22,10 @@ export async function apiFetch<T>(
   const token = await options.getToken();
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: options.method ?? "GET",
+    // Every call here is authenticated, request-scoped state (staff
+    // status, workspace data, ...) — never something the browser should
+    // reuse across requests, e.g. a stale is_staff from before elevation.
+    cache: "no-store",
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),

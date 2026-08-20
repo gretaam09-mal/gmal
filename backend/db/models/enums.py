@@ -5,11 +5,12 @@ class Role(str, enum.Enum):
     """Workspace membership roles.
 
     One-liners shown to users when inviting a member (see
-    frontend/features/workspaces for the UI copy):
-      OWNER    — Full control: manage members, settings, and all workspace content.
+    frontend/features/workspaces for the UI copy — displayed as
+    "assessment" there, see api/schemas.py::ROLE_DESCRIPTIONS):
+      OWNER    — Full control: manage members, settings, and all assessment content.
       ANALYST  — Build and edit entity profiles, analyses, and memo drafts.
       APPROVER — Review and approve memos before they go out, alongside analyst work.
-      VIEWER   — Read-only access to the workspace's profiles, analyses, and memos.
+      VIEWER   — Read-only access to the assessment's profiles, analyses, and memos.
     """
 
     OWNER = "owner"

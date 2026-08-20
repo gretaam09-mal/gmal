@@ -13,11 +13,17 @@ from anthropic import Anthropic
 from pydantic import ValidationError
 
 from api.config import get_settings
+from services.ai.anthropic_calls import create_tool_message
 from services.predicate_assist.provider import PredicateAssistError
 from services.predicate_assist.schemas import DraftedPredicate
 
 _PROMPT_PATH = (
     Path(__file__).resolve().parents[3] / "ai" / "prompts" / "P-PREDICATE-ASSIST.v1.md"
+)
+
+_TOOL_NAME = "record_drafted_predicate"
+_TOOL_DESCRIPTION = (
+    "Records a draft predicate expression for a human reviewer to check and approve."
 )
 
 
@@ -59,20 +65,25 @@ class AnthropicPredicateAssistProvider:
             f"Threshold: {threshold_value} (cited: {threshold_clause_ref})\n\n"
             f"Available profile fields:\n{json.dumps(available_fields)}"
         )
-        response = self._client.messages.create(
+        data = create_tool_message(
+            self._client,
+            PredicateAssistError,
             model=self._model,
             max_tokens=1024,
-            temperature=0.0,
             system=self._system_prompt,
             messages=[{"role": "user", "content": user_message}],
+            tool_name=_TOOL_NAME,
+            tool_description=_TOOL_DESCRIPTION,
+            input_schema=DraftedPredicate.model_json_schema(),
+            # DraftedPredicate.expression is deliberately an open dict — the
+            # predicate DSL tree has no fixed shape (see engine/predicates/dsl.py)
+            # — so it can't be made additionalProperties:false like every other
+            # schema in this codebase without collapsing it to {}. Anthropic's
+            # strict tool use requires additionalProperties:false on every
+            # object, with no exception, so strict mode isn't usable for this
+            # one call; _must_be_valid_dsl below is what actually guards its shape.
+            strict=False,
         )
-        raw = "".join(block.text for block in response.content if block.type == "text")
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise PredicateAssistError(
-                f"P-PREDICATE-ASSIST returned non-JSON output: {raw!r}"
-            ) from exc
         try:
             return DraftedPredicate.model_validate(data)
         except ValidationError as exc:

@@ -1,4 +1,18 @@
-from services.exports.pdf import render_html_to_pdf
+import pytest
+
+from services.exports import pdf
+from services.exports.pdf import PdfRenderingError, render_html_to_pdf
+
+
+def test_render_html_to_pdf_raises_clean_error_when_chromium_is_missing(monkeypatch):
+    """Simulates a deploy environment where `playwright install chromium`
+    was never run (the Render bug this guards against) — Chromium's
+    launch() fails, and that must surface as a clear PdfRenderingError,
+    not a raw Playwright stack trace bubbling up as an opaque 500."""
+    monkeypatch.setattr(pdf, "_executable_path", lambda: "/nonexistent/chromium-binary")
+
+    with pytest.raises(PdfRenderingError, match="playwright install chromium"):
+        render_html_to_pdf("<html><body>hi</body></html>")
 
 
 def test_render_html_to_pdf_produces_valid_pdf_bytes():

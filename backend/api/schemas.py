@@ -8,10 +8,10 @@ from db.models.enums import MembershipStatus, ProfileFieldSource, Role
 from engine.completeness.catalog import Section
 
 ROLE_DESCRIPTIONS: dict[Role, str] = {
-    Role.OWNER: "Full control: manage members, settings, and all workspace content.",
+    Role.OWNER: "Full control: manage members, settings, and all assessment content.",
     Role.ANALYST: "Build and edit entity profiles, analyses, and memo drafts.",
     Role.APPROVER: "Review and approve memos before they go out, alongside analyst work.",
-    Role.VIEWER: "Read-only access to the workspace's profiles, analyses, and memos.",
+    Role.VIEWER: "Read-only access to the assessment's profiles, analyses, and memos.",
 }
 
 
@@ -138,6 +138,17 @@ class MeOut(BaseModel):
     id: uuid.UUID
     email: str
     is_staff: bool
+    admin_emails_configured: bool
+    """Self-diagnostic for PROVISION_ADMIN_EMAILS staff elevation (see
+    api/deps.py::_maybe_elevate_to_staff): True iff the env var is set to
+    a non-empty value on this running process. False here — while the
+    operator is sure they set it — means the deploy hasn't picked it up
+    (e.g. no redeploy since it was set)."""
+    email_matches_admin_list: bool
+    """True iff this user's own email is on that list. False + is_staff
+    False pinpoints an email mismatch (wrong address, or Clerk's session
+    token not including a real email — see docs/runbooks/clerk-setup.md)
+    rather than a missing/misconfigured env var."""
 
     model_config = {"from_attributes": True}
 
@@ -298,7 +309,7 @@ class OnboardingMetricOut(BaseModel):
 
 class AnalysisCreateRequest(BaseModel):
     entity_profile_id: uuid.UUID | None = None
-    """Defaults to the workspace's current profile version if omitted."""
+    """Defaults to the assessment's current profile version if omitted."""
     discount_rate_pct: float = 0
     fx_rate: float = 1
     base_currency: str = Field(default="GBP", max_length=10)

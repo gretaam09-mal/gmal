@@ -5,12 +5,13 @@ enforced identically everywhere (CONVENTIONS.md rule #3).
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from api.deps import (
     get_composition_provider,
+    get_cost_estimate_provider,
     get_current_user,
     get_diff_note_provider,
     get_workspace_db,
@@ -47,6 +48,7 @@ from db.models import (
 )
 from services.audit import record_audit_event
 from services.composition.provider import CompositionError, CompositionProvider
+from services.cost_estimate.provider import CostEstimateError
 from services.diff_note.provider import DiffNoteError, DiffNoteProvider
 from services.memo import (
     MemoLockedError,
@@ -84,9 +86,7 @@ def _assumptions_for(session: Session, memo_version_id: uuid.UUID) -> list[Assum
 
 def _reviews_for(session: Session, memo_version_id: uuid.UUID) -> list[Review]:
     return list(
-        session.execute(
-            select(Review).where(Review.memo_version_id == memo_version_id)
-        ).scalars()
+        session.execute(select(Review).where(Review.memo_version_id == memo_version_id)).scalars()
     )
 
 
@@ -146,9 +146,7 @@ def _get_memo_or_404(session: Session, memo_id: uuid.UUID, workspace_id: uuid.UU
     return memo
 
 
-def _get_memo_version_or_404(
-    session: Session, memo: Memo, version_id: uuid.UUID
-) -> MemoVersion:
+def _get_memo_version_or_404(session: Session, memo: Memo, version_id: uuid.UUID) -> MemoVersion:
     version = session.get(MemoVersion, version_id)
     if version is None or version.memo_id != memo.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Memo version not found")
@@ -159,6 +157,7 @@ def _get_memo_version_or_404(
     "/workspaces/{workspace_id}/memos", response_model=MemoOut, status_code=status.HTTP_201_CREATED
 )
 async def create_memo(
+    request: Request,
     body: MemoCreateRequest,
     current_user: User = Depends(get_current_user),
     membership: Membership = Depends(require_role(*_ANALYST_ROLES)),
@@ -168,6 +167,15 @@ async def create_memo(
     analysis = session.get(Analysis, body.analysis_id)
     if analysis is None or analysis.workspace_id != membership.workspace_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Analysis not found")
+    # cost_estimate_provider is resolved lazily (a factory, not
+    # Depends(...)) — the overwhelmingly common case is every binding
+    # obligation already has an expert cost template, so an unconditional
+    # Depends would make ordinary memo creation require an Anthropic key
+    # it never actually uses (same reasoning as api/routes/analyses.py's
+    # re-run sync path).
+    cost_estimate_provider_factory = request.app.dependency_overrides.get(
+        get_cost_estimate_provider, get_cost_estimate_provider
+    )
     try:
         memo = create_memo_from_analysis(
             session,
@@ -177,8 +185,11 @@ async def create_memo(
             title=body.title,
             created_by_user_id=current_user.id,
             composition_provider=composition_provider,
+            cost_estimate_provider=cost_estimate_provider_factory,
         )
     except CompositionError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+    except CostEstimateError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
     record_audit_event(
         session,

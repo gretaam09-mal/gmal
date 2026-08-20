@@ -45,6 +45,13 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     anthropic_extraction_model: str = "claude-sonnet-5"
 
+    # P-COST-ESTIMATE (services/cost_estimate) — see ai/prompts/. This is
+    # the one prompt where the model is asked to originate a number
+    # itself (CONVENTIONS.md rule 1's narrow cost-estimation exception),
+    # so it deliberately uses the strongest available model rather than
+    # the standard extraction model above.
+    anthropic_cost_estimate_model: str = "claude-opus-4-8"
+
     # Comma-separated origins allowed to call the API from a browser (the
     # frontend is on a different host in every deployment). "*" in dev.
     cors_allowed_origins: str = "*"
@@ -52,6 +59,16 @@ class Settings(BaseSettings):
     @property
     def cors_allowed_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
+
+    # Comma-separated emails auto-granted staff (admin workbench) access on
+    # their next sign-in — see api/deps.py::_maybe_elevate_to_staff and
+    # docs/runbooks/anthropic-setup.md. Blank by default: nobody is staff
+    # from this mechanism until an operator sets it.
+    admin_emails: str = ""
+
+    @property
+    def admin_emails_list(self) -> list[str]:
+        return [email.strip().lower() for email in self.admin_emails.split(",") if email.strip()]
 
 
 @lru_cache

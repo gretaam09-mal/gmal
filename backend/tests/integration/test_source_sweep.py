@@ -5,6 +5,7 @@ from db.models.enums import SweepRunStatus
 from db.session import set_rls_context
 from services.composition.fixture_provider import FixtureCompositionProvider
 from services.composition.schemas import ComposedMemoProse
+from services.cost_estimate.fixture_provider import FixtureCostEstimateProvider
 from services.extraction import ExtractedObligation, FixtureExtractionProvider
 from services.instrument_onboarding import (
     approve_obligation,
@@ -143,6 +144,7 @@ def _seeded_approved_memo(client_as, make_user, db_session, *, title):
         title=f"{title} — Impact Memo",
         created_by_user_id=owner.id,
         composition_provider=composition_provider,
+        cost_estimate_provider=lambda: FixtureCostEstimateProvider(),
     )
     db_session.commit()
 

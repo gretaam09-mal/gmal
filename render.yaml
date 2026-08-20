@@ -18,7 +18,13 @@ services:
     runtime: python
     plan: free
     rootDir: backend
-    buildCommand: pip install poetry && poetry install --no-root
+    # `--with-deps` also installs the OS-level shared libraries Chromium
+    # needs to launch (nss, atk, etc.) — without it the binary downloads
+    # but fails to start. Matches .github/workflows/ci.yml's backend job,
+    # which needs the same browser for the same PDF-export tests.
+    buildCommand: >-
+      pip install poetry && poetry install --no-root &&
+      poetry run playwright install --with-deps chromium
     startCommand: >-
       poetry run python -m scripts.ensure_extensions &&
       poetry run alembic upgrade head &&
@@ -43,6 +49,19 @@ services:
       # Optional — see docs/runbooks/companies-house-setup.md. The app
       # runs fine without it; only the auto-fill button needs it.
       - key: PROVISION_COMPANIES_HOUSE_API_KEY
+        sync: false
+      # Required for the /admin workbench's P-EXTRACT, P-PREDICATE-ASSIST,
+      # P-COMPOSE, and P-DIFF-NOTE calls (see ai/prompts/). Without it, those
+      # routes fail closed with a clear 502 rather than a stack trace — see
+      # services/ai/anthropic_calls.py — but instrument onboarding needs a
+      # real key set here to actually draft obligations or compose memos.
+      - key: PROVISION_ANTHROPIC_API_KEY
+        sync: false
+      # Optional — see docs/runbooks/anthropic-setup.md "Staff access to
+      # the workbench". Comma-separated emails auto-granted /admin access
+      # on their next sign-in. Blank by default: nobody is elevated by
+      # this mechanism until you set it.
+      - key: PROVISION_ADMIN_EMAILS
         sync: false
       # Set to the frontend's Render URL once you know it (see
       # provision-web below) so the browser is allowed to call this API.

@@ -13,9 +13,14 @@ from api.main import app
 #  - /health: no data, no auth.
 #  - /roles: static role descriptions, no tenant data.
 #  - /profile-field-catalog: static field catalog, no tenant data.
-#  - POST /tenants, GET /tenants/{id}: tenant identity itself, not a
-#    workspace's content (tenants aren't RLS-protected — see the RLS
-#    migration's comment on why).
+#  - GET /tenants, POST /tenants, GET /tenants/{id}: tenant identity
+#    itself, not a workspace's content (tenants aren't RLS-protected —
+#    see the RLS migration's comment on why). GET /tenants lists every
+#    tenant the caller belongs to across ALL tenants — there's no single
+#    workspace_id to scope it to, by design (see api/routes/tenants.py::
+#    list_my_tenants — it uses set_user_context + memberships_self_read
+#    instead, the same pattern get_workspace_membership itself uses to
+#    bootstrap before a tenant is known).
 #  - /tenants/{id}/workspaces (GET+POST): listing/creating workspaces
 #    *within* a tenant — scoped by tenant_id from the path, checked
 #    against membership explicitly in the handler (see
@@ -36,6 +41,7 @@ _EXEMPT = {
     ("GET", "/me"),
     ("GET", "/roles"),
     ("GET", "/profile-field-catalog"),
+    ("GET", "/tenants"),
     ("POST", "/tenants"),
     ("GET", "/tenants/{tenant_id}"),
     ("POST", "/tenants/{tenant_id}/workspaces"),

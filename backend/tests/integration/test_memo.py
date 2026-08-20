@@ -9,6 +9,7 @@ from db.models.enums import MemoStatus
 from db.session import set_rls_context
 from services.composition.fixture_provider import FixtureCompositionProvider
 from services.composition.schemas import ComposedMemoProse
+from services.cost_estimate.fixture_provider import FixtureCostEstimateProvider
 from services.diff_note.fixture_provider import FixtureDiffNoteProvider
 from services.diff_note.schemas import ComposedDiffNote
 from services.diff_note.validator import validate_diff_note
@@ -180,6 +181,7 @@ def _setup_memo(client_as, make_user, db_session):
         title="Project Falcon — Impact Memo",
         created_by_user_id=owner.id,
         composition_provider=composition_provider,
+        cost_estimate_provider=lambda: FixtureCostEstimateProvider(),
     )
     db_session.commit()
     return workspace, owner, predicate, memo
@@ -190,9 +192,7 @@ def test_create_memo_from_analysis_populates_content_and_assumptions(
 ):
     _workspace, _owner, predicate, memo = _setup_memo(client_as, make_user, db_session)
 
-    version = (
-        db_session.query(MemoVersion).filter(MemoVersion.memo_id == memo.id).one()
-    )
+    version = db_session.query(MemoVersion).filter(MemoVersion.memo_id == memo.id).one()
     assert version.status == MemoStatus.DRAFT
     assert version.version == 1
 
@@ -212,9 +212,7 @@ def test_create_memo_from_analysis_populates_content_and_assumptions(
     assert f"driver:{predicate.id}:scale.employee_count" in keys
 
 
-def test_override_assumption_recomputes_and_produces_a_diff_note(
-    client_as, make_user, db_session
-):
+def test_override_assumption_recomputes_and_produces_a_diff_note(client_as, make_user, db_session):
     _workspace, _owner, predicate, memo = _setup_memo(client_as, make_user, db_session)
     version = db_session.query(MemoVersion).filter(MemoVersion.memo_id == memo.id).one()
     driver_key = f"driver:{predicate.id}:scale.employee_count"

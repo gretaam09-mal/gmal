@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from api.config import get_settings
 from api.routes import (
@@ -17,8 +18,42 @@ from api.routes import (
     tenants,
     workspaces,
 )
+from services.composition.provider import CompositionError
+from services.cost_estimate.provider import CostEstimateError
+from services.diff_note.provider import DiffNoteError
+from services.exports.pdf import PdfRenderingError
+from services.extraction.provider import ExtractionError
+from services.predicate_assist.provider import PredicateAssistError
 
 app = FastAPI(title="Provision API", version="0.1.0")
+
+
+async def _external_dependency_error_handler(_request: Request, exc: Exception) -> JSONResponse:
+    """Backstop for errors raised by something this service depends on
+    but doesn't control — an AI provider (a route's own try/except, see
+    api/routes/admin_instruments.py, memos.py, analyses.py, catches
+    these when the call itself fails, including P-COST-ESTIMATE's
+    CostEstimateError; this handler is for the case that try/except
+    can't reach: the provider raising during FastAPI's dependency
+    resolution, e.g. AnthropicExtractionProvider.__init__ raising
+    ExtractionNotConfiguredError because PROVISION_ANTHROPIC_API_KEY
+    isn't set, before any route body — or try/except — ever runs) or
+    headless Chromium for PDF export (PdfRenderingError, raised when the
+    browser binary isn't installed in this environment). Without this,
+    either surfaces as an opaque 500 instead of a clear, actionable
+    message."""
+    return JSONResponse(status_code=status.HTTP_502_BAD_GATEWAY, content={"detail": str(exc)})
+
+
+for _error_cls in (
+    ExtractionError,
+    CompositionError,
+    CostEstimateError,
+    PredicateAssistError,
+    DiffNoteError,
+    PdfRenderingError,
+):
+    app.add_exception_handler(_error_cls, _external_dependency_error_handler)
 
 app.add_middleware(
     CORSMiddleware,

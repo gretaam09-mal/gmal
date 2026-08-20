@@ -28,7 +28,7 @@ async def get_workspace(
 ) -> WorkspaceOut:
     workspace = session.get(Workspace, membership.workspace_id)
     if workspace is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Workspace not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Assessment not found")
     out = WorkspaceOut.model_validate(workspace)
     out.my_role = membership.role
     return out
@@ -73,7 +73,7 @@ async def invite_member(
     except IntegrityError as exc:
         session.rollback()
         raise HTTPException(
-            status.HTTP_409_CONFLICT, "That email is already invited to this workspace"
+            status.HTTP_409_CONFLICT, "That email is already invited to this assessment"
         ) from exc
 
     record_audit_event(

@@ -2,6 +2,7 @@
 
 See engine/__init__.py: deterministic, no LLM arithmetic.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -20,6 +21,26 @@ class RangeResult:
     worst: Decimal | None
     currency: str = "GBP"
     missing_driver_keys: tuple[str, ...] = ()
+
+
+def range_from_estimate(
+    *, best: Decimal, likely: Decimal, worst: Decimal, currency: str = "GBP"
+) -> RangeResult:
+    """Builds a RangeResult directly from an already-produced best/likely/
+    worst triple instead of deriving one from a formula (compute_range) —
+    used only when a binding obligation has no expert CostTemplate to
+    source a formula from and services/cost_estimate has asked an LLM for
+    a company-specific estimate instead (CONVENTIONS.md rule 1's narrow
+    cost-estimation exception).
+
+    services/cost_estimate/schemas.py::CostEstimate already enforces
+    best <= likely <= worst on whatever the model returned; this function
+    re-checks it so no caller can construct a nonsensical RangeResult
+    from this entry point, matching compute_range's own guarantee.
+    """
+    if not (best <= likely <= worst):
+        raise ValueError(f"best ({best}) <= likely ({likely}) <= worst ({worst}) must hold")
+    return RangeResult(best=best, likely=likely, worst=worst, currency=currency)
 
 
 def compute_range(formula: dict, facts: dict, *, currency: str = "GBP") -> RangeResult:

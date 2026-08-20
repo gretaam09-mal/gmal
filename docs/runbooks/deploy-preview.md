@@ -22,6 +22,10 @@ one go, under one free Render account.
 5. Optionally set `PROVISION_COMPANIES_HOUSE_API_KEY` on `provision-api` (see
    `docs/runbooks/companies-house-setup.md`) — only needed for the
    auto-fill button, not for the app to run.
+6. To reach the internal `/admin` instrument-onboarding workbench, set
+   `PROVISION_ADMIN_EMAILS` on `provision-api` to your email (comma-separate
+   for more than one) and sign in again — see
+   `docs/runbooks/anthropic-setup.md` "Staff access to the workbench".
 
 ## Known limitations of this free setup
 

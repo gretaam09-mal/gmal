@@ -14,6 +14,8 @@ type GetToken = () => Promise<string | null>;
 
 export const listRoles = (getToken: GetToken) => apiFetch<RoleInfo[]>("/roles", { getToken });
 
+export const listMyTenants = (getToken: GetToken) => apiFetch<Tenant[]>("/tenants", { getToken });
+
 export const createTenant = (getToken: GetToken, body: { name: string; slug: string }) =>
   apiFetch<Tenant>("/tenants", { method: "POST", body, getToken });
 
