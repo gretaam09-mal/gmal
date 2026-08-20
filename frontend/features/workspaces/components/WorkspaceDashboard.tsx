@@ -10,8 +10,8 @@ import { ProfileEditor } from "@/features/profile/components/ProfileEditor";
 import { AccountBar } from "@/features/shared/components/AccountBar";
 import { getMe } from "@/lib/me";
 
-import { createTenant, createWorkspace, listWorkspaces } from "../api";
-import type { Workspace } from "../types";
+import { createTenant, createWorkspace, listMyTenants, listWorkspaces } from "../api";
+import type { Tenant, Workspace } from "../types";
 import { MembersPanel } from "./MembersPanel";
 import { RoleBadge } from "./RoleBadge";
 
@@ -20,6 +20,7 @@ type Tab = "profile" | "exposure" | "memo" | "review" | "members";
 
 export function WorkspaceDashboard() {
   const { getToken } = useAuth();
+  const [tenants, setTenants] = useState<Tenant[] | null>(null); // null = still loading
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
@@ -27,8 +28,21 @@ export function WorkspaceDashboard() {
   const [isStaff, setIsStaff] = useState(false);
 
   useEffect(() => {
-    const stored = typeof window !== "undefined" ? window.localStorage.getItem(LAST_TENANT_KEY) : null;
-    if (stored) setTenantId(stored);
+    // The database — not the browser's localStorage — is the source of
+    // truth for which organisation(s) this Clerk identity belongs to.
+    // A cleared browser or a new device used to lose the cached tenant id
+    // entirely and land here as if the user had never created anything;
+    // this always re-discovers every organisation the user actually has a
+    // claim on (see GET /tenants) before ever offering "create one".
+    listMyTenants(getToken).then((myTenants) => {
+      setTenants(myTenants);
+      if (myTenants.length === 0) return;
+      const stored = typeof window !== "undefined" ? window.localStorage.getItem(LAST_TENANT_KEY) : null;
+      const resolved = myTenants.find((t) => t.id === stored) ?? myTenants[0];
+      if (!resolved) return;
+      setTenantId(resolved.id);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -40,13 +54,19 @@ export function WorkspaceDashboard() {
 
   useEffect(() => {
     if (!tenantId) return;
+    if (typeof window !== "undefined") window.localStorage.setItem(LAST_TENANT_KEY, tenantId);
     listWorkspaces(getToken, tenantId).then(setWorkspaces);
   }, [tenantId, getToken]);
 
   async function handleCreateTenant(name: string, slug: string) {
     const tenant = await createTenant(getToken, { name, slug });
-    window.localStorage.setItem(LAST_TENANT_KEY, tenant.id);
+    setTenants((prev) => [...(prev ?? []), tenant]);
     setTenantId(tenant.id);
+  }
+
+  function handleSwitchTenant(id: string) {
+    setSelectedWorkspaceId(null);
+    setTenantId(id);
   }
 
   async function handleCreateWorkspace(codename: string, realName: string) {
@@ -68,11 +88,31 @@ export function WorkspaceDashboard() {
         <AccountBar isStaff={isStaff} />
       </header>
 
-      {!tenantId ? (
+      {tenants === null ? (
+        <p className="font-ui text-sm text-ink/60">Loading your organisations…</p>
+      ) : tenants.length === 0 ? (
         <CreateTenantForm onCreate={handleCreateTenant} />
-      ) : (
+      ) : !tenantId ? null : (
         <div className="grid grid-cols-[240px_1fr] gap-6">
           <aside className="flex flex-col gap-4">
+            {tenants.length > 1 ? (
+              <div className="flex flex-col gap-1">
+                <h2 className="font-ui text-sm font-medium uppercase tracking-wide text-ink/50">
+                  Organisation
+                </h2>
+                <select
+                  value={tenantId}
+                  onChange={(event) => handleSwitchTenant(event.target.value)}
+                  className="rounded border border-ink/20 bg-paper px-2 py-1 font-ui text-sm"
+                >
+                  {tenants.map((tenant) => (
+                    <option key={tenant.id} value={tenant.id}>
+                      {tenant.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
             <h2 className="font-ui text-sm font-medium uppercase tracking-wide text-ink/50">
               Assessments
             </h2>

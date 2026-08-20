@@ -8,10 +8,63 @@ from sqlalchemy.orm import Session
 from api.deps import get_current_user, get_raw_session
 from api.schemas import TenantCreate, TenantOut, WorkspaceCreate, WorkspaceOut
 from db.models import Membership, MembershipStatus, Role, Tenant, User, Workspace
-from db.session import set_rls_context, tenant_session
+from db.session import set_rls_context, set_user_context, tenant_session
 from services.audit import record_audit_event
 
 router = APIRouter(tags=["tenants"])
+
+
+@router.get("/tenants", response_model=list[TenantOut])
+async def list_my_tenants(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_raw_session),
+) -> list[Tenant]:
+    """Every tenant this Clerk identity can act in — the one place the app
+    looks up "which organisations does this user belong to" from the
+    database, rather than trusting client-side state.
+
+    Before this route existed, the frontend's only record of "which tenant
+    is mine" was a tenant id cached in the browser's localStorage — nothing
+    server-side ever told a returning user which tenant(s) they already
+    belonged to. A cleared browser, a new device, or a different browser
+    profile lost that cached id, landed the user on the "create an
+    organisation" screen, and a brand new (empty) tenant got created —
+    their real one, and everything in it, was never deleted, just no
+    longer reachable from the UI. Listing every tenant the user actually
+    has a claim on here — not just the last one the browser happened to
+    remember — is what makes that class of "my assessments disappeared"
+    impossible going forward.
+
+    A user has a claim on a tenant either by being its creator (covers a
+    tenant with no workspace/membership yet) or by holding an active
+    membership in one of its workspaces — set_user_context (not
+    set_rls_context) is what lets the raw session read the caller's own
+    membership rows here without already knowing a tenant to scope to;
+    see memberships_self_read in the row_level_security migration history.
+    """
+    set_user_context(session, current_user.id)
+    member_tenant_ids = list(
+        session.execute(
+            select(Membership.tenant_id).where(
+                Membership.user_id == current_user.id,
+                Membership.status == MembershipStatus.ACTIVE,
+            )
+        ).scalars()
+    )
+
+    tenants = (
+        session.execute(
+            select(Tenant)
+            .where(
+                (Tenant.created_by_user_id == current_user.id)
+                | (Tenant.id.in_(member_tenant_ids))
+            )
+            .order_by(Tenant.created_at)
+        )
+        .scalars()
+        .all()
+    )
+    return list(tenants)
 
 
 @router.post("/tenants", response_model=TenantOut, status_code=status.HTTP_201_CREATED)
