@@ -27,8 +27,12 @@ class FixturePredicateAssistProvider:
         threshold_value: str,
         threshold_clause_ref: str,
         available_fields: list[dict[str, Any]],
+        session: Any = None,
     ) -> DraftedPredicate:
-        del who_value, who_clause_ref, threshold_value, threshold_clause_ref, available_fields
+        # session: accepted (and ignored) only so real call sites can pass
+        # it unconditionally — see services/ai/router.py's metrics logging.
+        del who_value, who_clause_ref, threshold_value, threshold_clause_ref
+        del available_fields, session
         try:
             return self._fixtures[obligation_summary]
         except KeyError:

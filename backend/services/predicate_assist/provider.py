@@ -1,5 +1,7 @@
 from typing import Any, Protocol
 
+from sqlalchemy.orm import Session
+
 from services.predicate_assist.schemas import DraftedPredicate
 
 
@@ -22,4 +24,5 @@ class PredicateAssistProvider(Protocol):
         threshold_value: str,
         threshold_clause_ref: str,
         available_fields: list[dict[str, Any]],
+        session: Session | None = None,
     ) -> DraftedPredicate: ...

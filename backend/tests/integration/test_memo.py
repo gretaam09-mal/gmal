@@ -121,7 +121,7 @@ class _StubDiffNoteProvider:
     def __init__(self, note: ComposedDiffNote) -> None:
         self._note = note
 
-    def summarise(self, changes):
+    def summarise(self, changes, **kwargs):
         validate_diff_note(self._note, changes)
         return self._note
 

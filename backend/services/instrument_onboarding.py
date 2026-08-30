@@ -168,7 +168,10 @@ def extract_obligation(
     could read (see services/analyses.py, which only ever queries
     approved obligations)."""
     extracted = provider.extract(
-        clause_text=clause.text, clause_ref=clause.clause_ref, instrument_title=instrument_title
+        clause_text=clause.text,
+        clause_ref=clause.clause_ref,
+        instrument_title=instrument_title,
+        session=session,
     )
     obligation = Obligation(
         clause_id=clause.id,
@@ -281,6 +284,7 @@ def draft_predicate(
         threshold_value=threshold["value"],
         threshold_clause_ref=threshold["clause_ref"],
         available_fields=available_fields,
+        session=session,
     )
     predicate = Predicate(
         obligation_id=obligation.id,

@@ -1,4 +1,7 @@
+import uuid
 from typing import Protocol
+
+from sqlalchemy.orm import Session
 
 from services.cost_estimate.context import CostEstimateContext
 from services.cost_estimate.schemas import CostEstimate
@@ -17,4 +20,11 @@ class CostEstimateProvider(Protocol):
     implements, and services/cost_estimate/fixture_provider.py /
     anthropic_provider.py for the two implementations."""
 
-    def estimate(self, context: CostEstimateContext) -> CostEstimate: ...
+    def estimate(
+        self,
+        context: CostEstimateContext,
+        *,
+        session: Session | None = None,
+        tenant_id: uuid.UUID | None = None,
+        workspace_id: uuid.UUID | None = None,
+    ) -> CostEstimate: ...

@@ -10,6 +10,8 @@ AnthropicCostEstimateProvider, which fails closed).
 
 from __future__ import annotations
 
+from typing import Any
+
 from services.cost_estimate.context import CostEstimateContext
 from services.cost_estimate.provider import CostEstimateError
 from services.cost_estimate.schemas import CostEstimate
@@ -22,7 +24,18 @@ class FixtureCostEstimateProvider:
     def register(self, predicate_id: str, estimate: CostEstimate) -> None:
         self._fixtures[predicate_id] = estimate
 
-    def estimate(self, context: CostEstimateContext) -> CostEstimate:
+    def estimate(
+        self,
+        context: CostEstimateContext,
+        *,
+        session: Any = None,
+        tenant_id: Any = None,
+        workspace_id: Any = None,
+    ) -> CostEstimate:
+        # session/tenant_id/workspace_id: accepted (and ignored) only so
+        # real call sites can pass them unconditionally — see
+        # services/ai/router.py's metrics logging.
+        del session, tenant_id, workspace_id
         try:
             return self._fixtures[context.predicate_id]
         except KeyError:

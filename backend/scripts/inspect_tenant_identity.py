@@ -42,7 +42,10 @@ def main() -> None:
 
         print(f"{len(users)} User row(s) for {args.email!r}:")
         for user in users:
-            print(f"  - id={user.id}  clerk_user_id={user.clerk_user_id!r}  is_staff={user.is_staff}")
+            print(
+                f"  - id={user.id}  clerk_user_id={user.clerk_user_id!r}  "
+                f"is_staff={user.is_staff}"
+            )
 
         for user in users:
             print(f"\n=== Tenants reachable by user {user.id} ({user.email}) ===")

@@ -141,7 +141,7 @@ def diff_note_provider_fixture():
     from services.diff_note.validator import validate_diff_note
 
     class _AutoDiffNoteProvider:
-        def summarise(self, changes):
+        def summarise(self, changes, **kwargs):
             parts = [f"{c.field} changed from {c.before} to {c.after}." for c in changes]
             note = ComposedDiffNote.model_validate(
                 {"change_note": " ".join(parts) or "No changes."}

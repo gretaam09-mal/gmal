@@ -112,7 +112,7 @@ class _EchoCompositionProvider:
     exact-key-per-predicate-combination lookup, which the memo re-run
     step can't predict the order of."""
 
-    def compose(self, context) -> ComposedMemoProse:
+    def compose(self, context, **kwargs) -> ComposedMemoProse:
         return ComposedMemoProse(
             headline_summary="Bounded exposure, updated.",
             obligations=[
