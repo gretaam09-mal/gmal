@@ -3,6 +3,8 @@ services/composition/fixture_provider.py for the pattern this follows.
 """
 from __future__ import annotations
 
+from typing import Any
+
 from engine.diff import Change
 from services.diff_note.provider import DiffNoteError
 from services.diff_note.schemas import ComposedDiffNote
@@ -20,7 +22,18 @@ class FixtureDiffNoteProvider:
     def register(self, key: str, note: ComposedDiffNote) -> None:
         self._fixtures[key] = note
 
-    def summarise(self, changes: tuple[Change, ...]) -> ComposedDiffNote:
+    def summarise(
+        self,
+        changes: tuple[Change, ...],
+        *,
+        session: Any = None,
+        tenant_id: Any = None,
+        workspace_id: Any = None,
+    ) -> ComposedDiffNote:
+        # session/tenant_id/workspace_id: accepted (and ignored) only so
+        # real call sites can pass them unconditionally — see
+        # services/ai/router.py's metrics logging.
+        del session, tenant_id, workspace_id
         key = _changes_key(changes)
         try:
             note = self._fixtures[key]

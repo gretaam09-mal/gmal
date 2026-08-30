@@ -1,5 +1,7 @@
 from typing import Protocol
 
+from sqlalchemy.orm import Session
+
 from services.extraction.schemas import ExtractedObligation
 
 
@@ -16,5 +18,10 @@ class ExtractionProvider(Protocol):
     / anthropic_provider.py for the two implementations."""
 
     def extract(
-        self, *, clause_text: str, clause_ref: str, instrument_title: str
+        self,
+        *,
+        clause_text: str,
+        clause_ref: str,
+        instrument_title: str,
+        session: Session | None = None,
     ) -> ExtractedObligation: ...

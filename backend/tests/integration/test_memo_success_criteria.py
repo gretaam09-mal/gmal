@@ -52,7 +52,7 @@ _RAW_TEXT = (
 
 
 class _StubDiffNoteProvider:
-    def summarise(self, changes):
+    def summarise(self, changes, **kwargs):
         note = ComposedDiffNote.model_validate({"change_note": "Recomputed after an override."})
         validate_diff_note(note, changes)
         return note

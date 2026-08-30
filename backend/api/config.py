@@ -52,6 +52,18 @@ class Settings(BaseSettings):
     # the standard extraction model above.
     anthropic_cost_estimate_model: str = "claude-opus-4-8"
 
+    # Kimi K3 (Moonshot) — see docs/Provision_Kimi_Integration_Spec.md and
+    # services/ai/router.py. KIMI_ENABLED is a dark-launch flag: off by
+    # default, so every task routes exactly as it did before this
+    # integration existed until an operator deliberately turns it on.
+    # Moonshot's hosted API is confidential_ok=False (see the spec's
+    # section 0) — the router enforces that regardless of this flag; the
+    # flag only controls whether Kimi is even attempted for a public task.
+    kimi_enabled: bool = False
+    moonshot_api_key: str | None = None
+    moonshot_base_url: str = "https://api.moonshot.ai/v1"
+    kimi_model: str = "kimi-k3"
+
     # Comma-separated origins allowed to call the API from a browser (the
     # frontend is on a different host in every deployment). "*" in dev.
     cors_allowed_origins: str = "*"

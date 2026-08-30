@@ -237,7 +237,10 @@ def _build_assumption_specs(
                     clause_refs=(ctx.clause_ref,),
                     clause_texts=(ctx.clause_text,),
                     company_facts=company_facts,
-                )
+                ),
+                session=session,
+                tenant_id=analysis.tenant_id,
+                workspace_id=analysis.workspace_id,
             )
             specs.append(
                 AssumptionSpec(
@@ -677,7 +680,9 @@ def create_memo_from_analysis(
         session, analysis=analysis, contexts=contexts, assumption_items=specs
     )
     compose_context = _compose_context(contexts, numeric_content)
-    prose = composition_provider.compose(compose_context)
+    prose = composition_provider.compose(
+        compose_context, session=session, tenant_id=tenant_id, workspace_id=workspace_id
+    )
     content = _merge_prose(numeric_content, prose)
 
     memo_version = MemoVersion(
@@ -743,7 +748,12 @@ def override_assumption_and_recompute(
     if new_assumption_numeric is not None:
         new_snapshot[f"assumption:{assumption.key}"] = new_assumption_numeric
     changes = compute_assumption_diff(old_snapshot, new_snapshot)
-    diff_note = diff_note_provider.summarise(changes)
+    diff_note = diff_note_provider.summarise(
+        changes,
+        session=session,
+        tenant_id=memo_version.tenant_id,
+        workspace_id=memo_version.workspace_id,
+    )
     record_assumption_override(
         session,
         tenant_id=memo_version.tenant_id,
@@ -911,7 +921,12 @@ def sync_memo_to_latest_analysis(
         session, analysis=new_analysis, contexts=contexts, assumption_items=specs
     )
     compose_context = _compose_context(contexts, numeric_content)
-    prose = composition_provider.compose(compose_context)
+    prose = composition_provider.compose(
+        compose_context,
+        session=session,
+        tenant_id=latest_version.tenant_id,
+        workspace_id=latest_version.workspace_id,
+    )
     content = _merge_prose(numeric_content, prose)
 
     if latest_version.status != MemoStatus.APPROVED:
@@ -935,7 +950,12 @@ def sync_memo_to_latest_analysis(
     old_snapshot = _numeric_snapshot(latest_version.content)
     new_snapshot = _numeric_snapshot(content)
     changes = compute_assumption_diff(old_snapshot, new_snapshot)
-    diff_note = diff_note_provider().summarise(changes)
+    diff_note = diff_note_provider().summarise(
+        changes,
+        session=session,
+        tenant_id=latest_version.tenant_id,
+        workspace_id=latest_version.workspace_id,
+    )
     content["change_note"] = diff_note.change_note
     content["superseded_version"] = latest_version.version
 

@@ -60,7 +60,33 @@ a raw session that could cross tenant boundaries. Row-level security in
 Postgres is the backstop, not the only line of defence: application code
 must still scope every query explicitly.
 
-## 4. One feature per branch; `engine/` changes still need a human merge
+## 5. Every AI call declares a data class; confidential data never reaches a non-confidential_ok provider
+
+Provision uses more than one AI provider (see
+`docs/Provision_Kimi_Integration_Spec.md`). Every call goes through
+`services/ai/router.py`, never a vendor SDK/HTTP client directly, and
+every call passes `data_class: "public" | "confidential"` as a required
+argument — there is no default and no inference from the task.
+
+A provider is registered with `confidential_ok: bool`. Before any network
+call, the router checks the resolved provider against the call's
+declared `data_class` and raises `ConfidentialRoutingError` if a
+confidential call would reach a provider that isn't `confidential_ok` —
+regardless of what the task's routing config says, so a config mistake
+alone can never be the only thing standing between a client's deal
+material and a provider that trains on submitted content or lacks a
+no-training DPA. The routing config itself (`AI_ROUTING` in
+`services/ai/routing.py`) is validated the same way at load: a
+confidential task naming a non-confidential_ok primary or fallback fails
+immediately, not the first time a real call happens to hit it.
+
+New providers and new tasks follow the same rule with no exception:
+public, non-client-specific work (extracting obligations from public
+legislation, drafting rules, dev/golden-set experimentation) may use a
+provider that isn't confidential_ok; anything touching a client's entity
+profile, deal inputs, or memo content may not.
+
+## 6. One feature per branch; `engine/` changes still need a human merge
 
 Branches are scoped to a single feature or fix — no bundling unrelated
 changes to save a review cycle.

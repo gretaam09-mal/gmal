@@ -10,6 +10,8 @@ default provider is AnthropicExtractionProvider, which fails closed).
 
 from __future__ import annotations
 
+from typing import Any
+
 from services.extraction.provider import ExtractionError
 from services.extraction.schemas import ExtractedObligation
 
@@ -22,9 +24,18 @@ class FixtureExtractionProvider:
         self._fixtures[clause_ref] = obligation
 
     def extract(
-        self, *, clause_text: str, clause_ref: str, instrument_title: str
+        self,
+        *,
+        clause_text: str,
+        clause_ref: str,
+        instrument_title: str,
+        session: Any = None,
     ) -> ExtractedObligation:
-        del clause_text, instrument_title  # deterministic on clause_ref only
+        # session: accepted (and ignored) only so real call sites can pass
+        # it unconditionally — see services/ai/router.py's metrics logging
+        # — without every test that injects this fixture needing to know
+        # about it too.
+        del clause_text, instrument_title, session  # deterministic on clause_ref only
         try:
             return self._fixtures[clause_ref]
         except KeyError:

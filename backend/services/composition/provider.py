@@ -1,4 +1,7 @@
+import uuid
 from typing import Protocol
+
+from sqlalchemy.orm import Session
 
 from services.composition.context import MemoComposeContext
 from services.composition.schemas import ComposedMemoProse
@@ -18,4 +21,11 @@ class CompositionProvider(Protocol):
     services/composition/fixture_provider.py /
     anthropic_provider.py for the two implementations."""
 
-    def compose(self, context: MemoComposeContext) -> ComposedMemoProse: ...
+    def compose(
+        self,
+        context: MemoComposeContext,
+        *,
+        session: Session | None = None,
+        tenant_id: uuid.UUID | None = None,
+        workspace_id: uuid.UUID | None = None,
+    ) -> ComposedMemoProse: ...

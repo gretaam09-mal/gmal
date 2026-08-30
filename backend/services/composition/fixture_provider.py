@@ -9,6 +9,8 @@ AnthropicCompositionProvider, which fails closed).
 """
 from __future__ import annotations
 
+from typing import Any
+
 from services.composition.context import MemoComposeContext
 from services.composition.provider import CompositionError
 from services.composition.schemas import ComposedMemoProse
@@ -26,7 +28,18 @@ class FixtureCompositionProvider:
     def register(self, key: str, prose: ComposedMemoProse) -> None:
         self._fixtures[key] = prose
 
-    def compose(self, context: MemoComposeContext) -> ComposedMemoProse:
+    def compose(
+        self,
+        context: MemoComposeContext,
+        *,
+        session: Any = None,
+        tenant_id: Any = None,
+        workspace_id: Any = None,
+    ) -> ComposedMemoProse:
+        # session/tenant_id/workspace_id: accepted (and ignored) only so
+        # real call sites can pass them unconditionally — see
+        # services/ai/router.py's metrics logging.
+        del session, tenant_id, workspace_id
         key = _context_key(context)
         try:
             prose = self._fixtures[key]

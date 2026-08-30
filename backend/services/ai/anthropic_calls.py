@@ -55,6 +55,8 @@ from typing import Any, TypeVar
 
 import anthropic
 
+from services.ai.strict_schema import prepare_strict_schema
+
 _ErrorT = TypeVar("_ErrorT", bound=Exception)
 
 
@@ -90,60 +92,11 @@ def _find_tool_input(response: anthropic.types.Message, tool_name: str) -> dict[
     return None
 
 
-# JSON Schema keywords Pydantic's model_json_schema() emits that
-# Anthropic's strict tool use doesn't support (numeric/length/pattern
-# constraints — see the structured-outputs reference). Stripping them
-# here doesn't weaken validation: every caller still runs the model's
-# own Model.model_validate(data) on the result, which enforces min_length,
-# ge/le, and any @model_validator ordering checks exactly as before. This
-# only relaxes what the API itself is asked to guarantee syntactically.
-_STRICT_UNSUPPORTED_KEYWORDS = frozenset(
-    {
-        "minLength",
-        "maxLength",
-        "minimum",
-        "maximum",
-        "exclusiveMinimum",
-        "exclusiveMaximum",
-        "multipleOf",
-        "minItems",
-        "maxItems",
-        "pattern",
-        "uniqueItems",
-    }
-)
-
-
-def _prepare_strict_schema(schema: Any) -> Any:
-    """Recursively makes a Model.model_json_schema() output strict-tool-use
-    safe: strips unsupported constraint keywords, and sets
-    additionalProperties: false on every object schema (Anthropic requires
-    this at every level, not just the top one — a nested object without it
-    is exactly how {"prose": {...}} slipped past a schema that only
-    constrained the outer shape)."""
-    if isinstance(schema, list):
-        return [_prepare_strict_schema(item) for item in schema]
-    if not isinstance(schema, dict):
-        return schema
-
-    schema = {
-        key: value for key, value in schema.items() if key not in _STRICT_UNSUPPORTED_KEYWORDS
-    }
-
-    if schema.get("type") == "object":
-        schema["additionalProperties"] = False
-
-    for key in ("properties", "$defs"):
-        if key in schema:
-            schema[key] = {
-                inner_key: _prepare_strict_schema(value) for inner_key, value in schema[key].items()
-            }
-
-    for key in ("items", "anyOf", "allOf", "oneOf"):
-        if key in schema:
-            schema[key] = _prepare_strict_schema(schema[key])
-
-    return schema
+# The strict-schema preparation (additionalProperties:false everywhere,
+# stripping unsupported constraint keywords) is shared with
+# services/ai/kimi_provider.py — both vendors' strict structured-output
+# modes have the same constraints. See services/ai/strict_schema.py.
+_prepare_strict_schema = prepare_strict_schema
 
 
 def create_tool_message(

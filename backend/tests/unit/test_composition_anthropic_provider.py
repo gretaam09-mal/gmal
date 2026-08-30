@@ -15,6 +15,9 @@ from decimal import Decimal
 
 import pytest
 
+from services.ai.claude_provider import ClaudeProvider
+from services.ai.router import AIRouter
+from services.ai.routing import TaskRoute
 from services.composition.anthropic_provider import AnthropicCompositionProvider
 from services.composition.context import MemoComposeContext, ObligationComposeInput
 from services.composition.provider import CompositionError
@@ -85,20 +88,32 @@ def _context() -> MemoComposeContext:
     )
 
 
-def _provider_with_fake_client(response_content: list) -> AnthropicCompositionProvider:
-    provider = AnthropicCompositionProvider(api_key="test-key")
-    provider._client = _FakeClient(response_content)
-    return provider
+def _provider_with_fake_client(
+    response_content: list,
+) -> tuple[AnthropicCompositionProvider, _FakeClient]:
+    fake_client = _FakeClient(response_content)
+    claude = ClaudeProvider(api_key="test-key")
+    claude._client = fake_client
+    router = AIRouter(
+        providers={"claude": claude},
+        routing={
+            "memo_composition": TaskRoute(
+                primary="claude", fallback="claude", data_class="confidential"
+            )
+        },
+    )
+    provider = AnthropicCompositionProvider(api_key="test-key", router=router)
+    return provider, fake_client
 
 
 def test_declares_the_schema_strict_so_the_api_cannot_nest_the_payload_under_an_extra_key():
-    provider = _provider_with_fake_client(
+    provider, fake_client = _provider_with_fake_client(
         [_ToolUseBlock("record_composed_memo_prose", _GOOD_INPUT)]
     )
 
     provider.compose(_context())
 
-    call = provider._client.messages.calls[0]
+    call = fake_client.messages.calls[0]
     tool = call["tools"][0]
     assert tool["strict"] is True
     schema = tool["input_schema"]
@@ -117,7 +132,7 @@ def test_composes_end_to_end_with_all_three_fields_present_given_a_well_formed_t
     mode now guarantees rather than merely hopes for — .compose() returns
     a result with headline_summary, the per-obligation prose, and
     excluded_summary all populated. The memo can actually compose."""
-    provider = _provider_with_fake_client(
+    provider, _fake_client = _provider_with_fake_client(
         [_ToolUseBlock("record_composed_memo_prose", _GOOD_INPUT)]
     )
 
@@ -135,7 +150,7 @@ def test_a_nested_prose_wrapper_still_fails_clearly_if_it_ever_slipped_through()
     must still fail loudly naming the missing fields — never silently
     compose a broken memo. This is the exact shape and message from the
     original bug report."""
-    provider = _provider_with_fake_client(
+    provider, _fake_client = _provider_with_fake_client(
         [
             _ToolUseBlock(
                 "record_composed_memo_prose",

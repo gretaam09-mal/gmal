@@ -1,4 +1,7 @@
+import uuid
 from typing import Protocol
+
+from sqlalchemy.orm import Session
 
 from engine.diff import Change
 from services.diff_note.schemas import ComposedDiffNote
@@ -14,4 +17,11 @@ class DiffNoteError(Exception):
 class DiffNoteProvider(Protocol):
     """P-DIFF-NOTE's interface — see ai/prompts/P-DIFF-NOTE.v1.md."""
 
-    def summarise(self, changes: tuple[Change, ...]) -> ComposedDiffNote: ...
+    def summarise(
+        self,
+        changes: tuple[Change, ...],
+        *,
+        session: Session | None = None,
+        tenant_id: uuid.UUID | None = None,
+        workspace_id: uuid.UUID | None = None,
+    ) -> ComposedDiffNote: ...
